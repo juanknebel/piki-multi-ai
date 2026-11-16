@@ -15,7 +15,9 @@ pub use client::ApiClient;
 pub use config::{Auth, ClientConfig};
 pub use http::HttpClient;
 pub use llamacpp::{LlamaCppClient, LlamaCppMessage, LlamaCppModel};
-pub use ollama::{ChatStreamEvent, OllamaClient, OllamaMessage, OllamaModel, RawToolCall};
+pub use ollama::{
+    ChatStreamEvent, ChatUsage, OllamaClient, OllamaMessage, OllamaModel, RawToolCall,
+};
 pub use openrouter::{OpenRouterClient, OpenRouterMessage, OpenRouterModel};
 pub use parser::{ParsedRequest, parse_hurl, parse_hurl_multi};
 pub use protocol::Protocol;

@@ -182,8 +182,14 @@ fn render_responses(
                 .add_modifier(Modifier::BOLD),
         )));
 
-        // Colorized body
-        all_lines.extend(colorize_json(&resp.body, p));
+        // Colorized body — the jq output while a filter is applied, so the
+        // raw responses stay untouched behind it.
+        let body = api
+            .jq_output
+            .as_ref()
+            .and_then(|out| out.get(idx))
+            .unwrap_or(&resp.body);
+        all_lines.extend(colorize_json(body, p));
 
         // Separator between responses
         if idx + 1 < total {
@@ -221,10 +227,12 @@ fn render_responses(
         p.warn
     };
 
-    let help_hint = if api.search.is_some() {
+    let help_hint = if api.jq.is_some() {
+        " [Enter] run  [C-u] clear  [Esc] drop filter "
+    } else if api.search.is_some() {
         " [C-f] search "
     } else {
-        " [C-j/C-k] scroll  [C-f] search "
+        " [C-j/C-k] scroll  [C-f] search  [C-q] jq "
     };
 
     let block = Block::default()
@@ -318,6 +326,30 @@ fn render_responses(
             Span::styled(" / ", Style::default().fg(p.iris)),
             Span::raw(&search.query),
             Span::styled(match_info, Style::default().fg(p.fg3)),
+        ]));
+        frame.render_widget(bar, bar_area);
+    }
+
+    // jq filter bar, on the same row the search bar uses.
+    if let Some(ref jq) = api.jq {
+        let bar_y = area.y + area.height.saturating_sub(2);
+        let bar_area = Rect::new(area.x + 1, bar_y, inner.width, 1);
+        frame.render_widget(Clear, bar_area);
+
+        let (note, note_color) = if jq.running {
+            (" running…".to_string(), p.warn)
+        } else if let Some(ref err) = jq.error {
+            (format!(" {err}"), p.err)
+        } else if api.jq_output.is_some() {
+            (" (filtered)".to_string(), p.fg3)
+        } else {
+            (String::new(), p.fg3)
+        };
+
+        let bar = Paragraph::new(Line::from(vec![
+            Span::styled(" jq ", Style::default().fg(p.iris)),
+            Span::raw(&jq.query),
+            Span::styled(note, Style::default().fg(note_color)),
         ]));
         frame.render_widget(bar, bar_area);
     }

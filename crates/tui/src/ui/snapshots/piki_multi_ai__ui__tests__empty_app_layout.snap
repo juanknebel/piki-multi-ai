@@ -1,19 +1,18 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 1141
 expression: content
 ---
 
-╭ WORKSPACES ──╮
+╭ PROJECTS ────╮
 │              │────────────────────────────────────────────────────────────────
-│ [C-g s] New w│╭ piki-multi-ai ───────────────────────────────────────────────╮
-│              ││                                                              │
+│ [n] New proje│╭ piki-multi-ai ───────────────────────────────────────────────╮
+│ [C-g s] Add r││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
 │              ││  Quick Start:                                                │
 │              ││                                                              │
-│              ││  1. [C-g s] Create your first workspace                      │
-│              ││  2. [C-g w] Switch between workspaces                        │
+│              ││  1. [C-g s] Add your first repository                        │
+│              ││  2. [C-g w] Switch between checkouts                         │
 ╰──────────────╯│  3. [Enter] Interact with the terminal                       │
 ╭ AGENTS ──────╮│  4. [C-g ?] Full help                                        │
 │  No agents ru││                                                              │
@@ -23,7 +22,7 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              ││                                                              │
+│              ││                                                              │
 │              │╰──────────────────────────────────────────────────────────────╯
-╰──────────────╯ No active workspace
- [C-g w] workspaces  [C-g s] new ws  [C-g e] edit ws
- [C-g d] delete ws  [Tab] projects
+╰──────────────╯ Nothing open
+ [n] new project  [C-g s] new ws

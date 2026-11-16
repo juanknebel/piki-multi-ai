@@ -1,432 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, ProjectTreeRow};
 use crate::clipboard;
 use crate::config::has_ctrl;
 use crate::dialog_state::DialogState;
 use crate::helpers::copy_visible_terminal;
-
-pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let ws = app.workspaces.get_mut(app.active_workspace)?;
-    let (kanban_app, kanban_provider) = match (&mut ws.kanban_app, &mut ws.kanban_provider) {
-        (Some(a), Some(p)) => (a, p),
-        _ => return None,
-    };
-
-    // Helper to get selected card ID
-    let selected_card_id = |a: &flow_tui::App| -> Option<String> {
-        a.board
-            .columns
-            .get(a.col)
-            .and_then(|col| col.cards.get(a.row))
-            .map(|card| card.id.clone())
-    };
-
-    if let Some(edit) = kanban_app.edit_state.as_mut() {
-        match key.code {
-            KeyCode::Esc => {
-                kanban_app.edit_state = None;
-            }
-            KeyCode::Tab => {
-                edit.focus = edit.focus.next();
-                edit.cursor_pos = edit.current_text().len();
-            }
-            KeyCode::Enter => {
-                if edit.title.trim().is_empty() {
-                    kanban_app.banner = Some("Title is required".to_string());
-                    edit.focus = flow_tui::app::EditFocus::Title;
-                    edit.cursor_pos = 0;
-                    return None;
-                }
-                if edit.project.trim().is_empty() {
-                    kanban_app.banner = Some("Project is required".to_string());
-                    edit.focus = flow_tui::app::EditFocus::Project;
-                    edit.cursor_pos = 0;
-                    return None;
-                }
-                let card_id = edit.card_id.clone();
-                let title = edit.title.clone();
-                let description = edit.description.clone();
-                let priority = edit.priority;
-                let assignee = edit.assignee.clone();
-                let project = edit.project.clone();
-                if let Err(e) = kanban_provider.update_card(
-                    &card_id,
-                    &title,
-                    &description,
-                    priority,
-                    &assignee,
-                    &project,
-                ) {
-                    kanban_app.banner = Some(format!("Save failed: {}", e));
-                } else {
-                    match kanban_provider.load_board() {
-                        Ok(b) => {
-                            kanban_app.board = b;
-                            kanban_app.clamp();
-                            kanban_app.banner = Some("Card saved".to_string());
-                        }
-                        Err(e) => kanban_app.banner = Some(format!("Reload failed: {}", e)),
-                    }
-                }
-                kanban_app.edit_state = None;
-            }
-            KeyCode::Left => {
-                edit.move_cursor_left();
-            }
-            KeyCode::Right => {
-                edit.move_cursor_right();
-            }
-            KeyCode::Home if edit.focus != flow_tui::app::EditFocus::Priority => {
-                edit.cursor_pos = 0;
-            }
-            KeyCode::End if edit.focus != flow_tui::app::EditFocus::Priority => {
-                edit.cursor_pos = edit.current_text().len();
-            }
-            KeyCode::Delete => {
-                edit.delete_curr();
-            }
-            KeyCode::Char(c) => {
-                edit.insert_char(c);
-            }
-            KeyCode::Backspace => {
-                edit.delete_prev();
-            }
-            _ => {}
-        }
-        return None;
-    }
-
-    if kanban_app.confirm_delete {
-        match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
-                if let Some(card_id) = selected_card_id(kanban_app) {
-                    if let Err(e) = kanban_provider.delete_card(&card_id) {
-                        kanban_app.banner = Some(format!("Delete failed: {}", e));
-                    } else {
-                        match kanban_provider.load_board() {
-                            Ok(b) => {
-                                kanban_app.board = b;
-                                kanban_app.clamp();
-                                kanban_app.banner = Some(format!("Card {} deleted", card_id));
-                            }
-                            Err(e) => kanban_app.banner = Some(format!("Reload failed: {}", e)),
-                        }
-                    }
-                }
-                kanban_app.confirm_delete = false;
-            }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                kanban_app.confirm_delete = false;
-            }
-            _ => {}
-        }
-        return None;
-    }
-
-    // Search mode: intercept keys while search overlay is active
-    if kanban_app.search_state.is_some() {
-        match key.code {
-            KeyCode::Esc | KeyCode::Enter => {
-                kanban_app.search_state = None;
-            }
-            KeyCode::Char(c) => {
-                if let Some(search) = kanban_app.search_state.as_mut() {
-                    search.insert_char(c);
-                }
-                let matches = kanban_app.search_matches();
-                if !matches.is_empty() {
-                    let current = (kanban_app.col, kanban_app.row);
-                    if !matches.contains(&current) {
-                        kanban_app.col = matches[0].0;
-                        kanban_app.row = matches[0].1;
-                    }
-                }
-            }
-            KeyCode::Backspace => {
-                if let Some(search) = kanban_app.search_state.as_mut() {
-                    search.delete_prev();
-                }
-                let matches = kanban_app.search_matches();
-                if !matches.is_empty() {
-                    let current = (kanban_app.col, kanban_app.row);
-                    if !matches.contains(&current) {
-                        kanban_app.col = matches[0].0;
-                        kanban_app.row = matches[0].1;
-                    }
-                }
-            }
-            KeyCode::Down => {
-                kanban_app.select_next_match();
-            }
-            KeyCode::Up => {
-                kanban_app.select_prev_match();
-            }
-            _ => {}
-        }
-        return None;
-    }
-
-    // Project filter mode
-    if kanban_app.project_filter_state.is_some() {
-        match key.code {
-            KeyCode::Esc => {
-                kanban_app.project_filter_state = None;
-            }
-            KeyCode::Enter | KeyCode::Char(' ') => {
-                if let Some(pf) = kanban_app.project_filter_state.as_mut()
-                    && pf.cursor < pf.projects.len()
-                {
-                    pf.selected[pf.cursor] = !pf.selected[pf.cursor];
-                }
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if let Some(pf) = kanban_app.project_filter_state.as_mut()
-                    && pf.cursor + 1 < pf.projects.len()
-                {
-                    pf.cursor += 1;
-                }
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if let Some(pf) = kanban_app.project_filter_state.as_mut()
-                    && pf.cursor > 0
-                {
-                    pf.cursor -= 1;
-                }
-            }
-            KeyCode::Char('a') => {
-                if let Some(pf) = kanban_app.project_filter_state.as_mut() {
-                    let all_selected = pf.selected.iter().all(|&s| s);
-                    for s in pf.selected.iter_mut() {
-                        *s = !all_selected;
-                    }
-                }
-            }
-            KeyCode::Tab => {
-                // Apply filter and close
-                if let Some(pf) = kanban_app.project_filter_state.take() {
-                    let selected: Vec<String> = pf
-                        .projects
-                        .iter()
-                        .zip(pf.selected.iter())
-                        .filter(|(_, sel)| **sel)
-                        .map(|(name, _)| name.clone())
-                        .collect();
-                    kanban_app.project_filter = selected;
-                    kanban_app
-                        .board
-                        .apply_project_filter(&kanban_app.project_filter);
-                    kanban_app.clamp();
-                }
-            }
-            _ => {}
-        }
-        return None;
-    }
-
-    // Dispatch agent: extract card data before borrowing app for dialog
-    if key.code == KeyCode::Char('D') {
-        let card_data = kanban_app
-            .board
-            .columns
-            .get(kanban_app.col)
-            .and_then(|col| col.cards.get(kanban_app.row))
-            .map(|card| {
-                (
-                    card.id.clone(),
-                    card.title.clone(),
-                    card.description.clone(),
-                    card.priority,
-                    card.project.clone(),
-                )
-            });
-        let source_ws = app.active_workspace;
-        if let Some((card_id, card_title, card_description, card_priority, card_project)) =
-            card_data
-        {
-            // Load & snapshot configured agents for this project
-            if let Some(ref storage) = app.storage.agent_profiles
-                && let Some(ws) = app.current_workspace()
-            {
-                let repo = ws.source_repo.clone();
-                if let Ok(agents) = storage.load_agents(&repo) {
-                    app.agent_profiles = agents;
-                }
-            }
-            let agents: Vec<(String, String, String)> = app
-                .agent_profiles
-                .iter()
-                .map(|a| (a.name.clone(), a.provider.clone(), a.role.clone()))
-                .collect();
-            app.active_dialog = Some(DialogState::DispatchAgent {
-                source_ws,
-                card_id,
-                card_title,
-                card_description,
-                card_priority,
-                card_project,
-                agent_idx: 0,
-                agents,
-                additional_prompt: String::new(),
-                additional_prompt_cursor: 0,
-                step: 0,
-                use_current_ws: false,
-            });
-            app.mode = AppMode::DispatchAgent;
-        }
-        return None;
-    }
-
-    let action = match key.code {
-        KeyCode::Char('q') => Some(flow_tui::Action::Quit),
-        KeyCode::Esc => Some(flow_tui::Action::CloseOrQuit),
-        KeyCode::Char('h') | KeyCode::Left => Some(flow_tui::Action::FocusLeft),
-        KeyCode::Char('l') | KeyCode::Right => Some(flow_tui::Action::FocusRight),
-        KeyCode::Char('j') | KeyCode::Down => Some(flow_tui::Action::SelectDown),
-        KeyCode::Char('k') | KeyCode::Up => Some(flow_tui::Action::SelectUp),
-        KeyCode::Char('H') => Some(flow_tui::Action::MoveLeft),
-        KeyCode::Char('L') => Some(flow_tui::Action::MoveRight),
-        KeyCode::Enter => Some(flow_tui::Action::ToggleDetail),
-        KeyCode::Char('r') => Some(flow_tui::Action::Refresh),
-        KeyCode::Char('d') => Some(flow_tui::Action::Delete),
-        KeyCode::Char('a') | KeyCode::Char('n') => Some(flow_tui::Action::Add),
-        KeyCode::Char('e') => Some(flow_tui::Action::Edit),
-        KeyCode::Char('s') => Some(flow_tui::Action::ToggleSort),
-        KeyCode::Char('/') => Some(flow_tui::Action::Search),
-        KeyCode::Char('p') => Some(flow_tui::Action::ProjectFilter),
-        _ => None,
-    };
-
-    if let Some(a) = action {
-        match a {
-            flow_tui::Action::Add => {
-                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else {
-                    kanban_app.banner = Some("Create failed: no column selected".to_string());
-                    return None;
-                };
-                match kanban_provider.create_card(&col.id, "") {
-                    Ok(id) => {
-                        kanban_app.edit_state = Some(flow_tui::app::EditState {
-                            card_id: id,
-                            col_id: col.id.clone(),
-                            is_new: true,
-                            title: "New card".to_string(),
-                            description: "".to_string(),
-                            priority: flow_core::Priority::Medium,
-                            assignee: "".to_string(),
-                            project: "".to_string(),
-                            cursor_pos: 8,
-                            focus: flow_tui::app::EditFocus::Title,
-                        });
-                    }
-                    Err(e) => {
-                        kanban_app.banner = Some(format!("Create failed: {}", e));
-                    }
-                }
-            }
-            flow_tui::Action::Edit => {
-                let col = kanban_app.board.columns.get(kanban_app.col)?;
-                let Some(card) = col.cards.get(kanban_app.row) else {
-                    kanban_app.banner = Some("Edit failed: no card selected".to_string());
-                    return None;
-                };
-                kanban_app.edit_state = Some(flow_tui::app::EditState {
-                    card_id: card.id.clone(),
-                    col_id: col.id.clone(),
-                    is_new: false,
-                    title: card.title.clone(),
-                    description: card.description.clone(),
-                    priority: card.priority,
-                    assignee: card.assignee.clone(),
-                    project: card.project.clone(),
-                    cursor_pos: card.title.len(),
-                    focus: flow_tui::app::EditFocus::Title,
-                });
-            }
-            flow_tui::Action::MoveLeft => {
-                if let Some((card_id, dst)) = kanban_app.optimistic_move(-1) {
-                    if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
-                        kanban_app.banner = Some(format!("Move failed: {}", e));
-                        // Revert optimistic move by reloading
-                        if let Ok(b) = kanban_provider.load_board() {
-                            kanban_app.board = b;
-                        }
-                    } else {
-                        kanban_app.banner = Some("Moved".to_string());
-                    }
-                }
-            }
-            flow_tui::Action::MoveRight => {
-                if let Some((card_id, dst)) = kanban_app.optimistic_move(1) {
-                    if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
-                        kanban_app.banner = Some(format!("Move failed: {}", e));
-                        // Revert optimistic move by reloading
-                        if let Ok(b) = kanban_provider.load_board() {
-                            kanban_app.board = b;
-                        }
-                    } else {
-                        kanban_app.banner = Some("Moved".to_string());
-                    }
-                }
-            }
-            flow_tui::Action::Refresh => match kanban_provider.load_board() {
-                Ok(b) => {
-                    kanban_app.board = b;
-                    kanban_app.clamp();
-                    kanban_app.banner = Some("Refreshed".to_string());
-                }
-                Err(e) => {
-                    kanban_app.banner = Some(format!("Refresh failed: {}", e));
-                }
-            },
-            flow_tui::Action::ToggleSort => {
-                kanban_app.apply(a);
-                let label = kanban_app.sort_order.label();
-                kanban_app.banner = Some(format!("Sorted by priority {}", label));
-            }
-            flow_tui::Action::Search => {
-                kanban_app.search_state = Some(flow_tui::app::SearchState::new());
-            }
-            flow_tui::Action::ProjectFilter => {
-                let mut all_projects = match kanban_provider.load_board() {
-                    Ok(b) => b.projects(),
-                    Err(_) => kanban_app.board.projects(),
-                };
-                let has_unassigned = kanban_app
-                    .board
-                    .columns
-                    .iter()
-                    .any(|c| c.cards.iter().any(|card| card.project.is_empty()));
-                if has_unassigned {
-                    all_projects.push(String::new());
-                }
-                if all_projects.is_empty() {
-                    kanban_app.banner = Some("No projects found".to_string());
-                } else {
-                    let selected: Vec<bool> = all_projects
-                        .iter()
-                        .map(|p| {
-                            kanban_app.project_filter.is_empty()
-                                || kanban_app.project_filter.contains(p)
-                        })
-                        .collect();
-                    kanban_app.project_filter_state = Some(flow_tui::app::ProjectFilterState {
-                        projects: all_projects,
-                        selected,
-                        cursor: 0,
-                    });
-                }
-            }
-            _ => {
-                // "Quit" from the kanban sub-app is a no-op now that there is
-                // no interaction mode to leave.
-                let _ = kanban_app.apply(a);
-            }
-        }
-    }
-    None
-}
 
 fn search_terminal(app: &mut App) {
     let search = match app.term_search.as_mut() {
@@ -935,11 +514,82 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
+    // jq filter bar captures input while open. Ctrl+J/Ctrl+K stay live so the
+    // response can be scrolled without closing the bar first.
+    if api.jq.is_some() {
+        if key.code == KeyCode::Char('j') && has_ctrl(key.modifiers, app.config.platform) {
+            api.response_scroll = api.response_scroll.saturating_add(1);
+            return None;
+        }
+        if key.code == KeyCode::Char('k') && has_ctrl(key.modifiers, app.config.platform) {
+            api.response_scroll = api.response_scroll.saturating_sub(1);
+            return None;
+        }
+        if key.code == KeyCode::Char('u') && has_ctrl(key.modifiers, app.config.platform) {
+            if let Some(ref mut jq) = api.jq {
+                jq.query.clear();
+                jq.cursor = 0;
+                jq.error = None;
+            }
+            return None;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                // Closing drops the filter: the panel goes back to the raw
+                // responses, so what you see always matches what is on screen.
+                api.jq = None;
+                api.jq_output = None;
+                api.response_scroll = 0;
+            }
+            KeyCode::Enter => {
+                let query = api.jq.as_ref().map(|jq| jq.query.clone())?;
+                return Some(Action::RunJqFilter(query));
+            }
+            // A Ctrl/Alt chord the bar doesn't handle is a shortcut, not
+            // text: swallow it rather than typing its letter into the filter.
+            KeyCode::Char(_)
+                if key.modifiers.intersects(
+                    KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER,
+                ) => {}
+            _ => {
+                if let Some(ref mut jq) = api.jq {
+                    let mut query = std::mem::take(&mut jq.query);
+                    let mut cursor = jq.cursor;
+                    crate::input::text_field_common::handle_text_input(
+                        &mut query,
+                        &mut cursor,
+                        key,
+                        |_| true,
+                    );
+                    jq.query = query;
+                    jq.cursor = cursor;
+                }
+            }
+        }
+        return None;
+    }
+
+    // Ctrl+Q (Cmd+Q on macOS): open the jq filter bar over the response
+    if key.code == KeyCode::Char('q')
+        && has_ctrl(key.modifiers, app.config.platform)
+        && !api.responses.is_empty()
+    {
+        api.search = None; // one bar at a time — they share the same row
+        api.jq = Some(crate::app::ApiJqState {
+            query: String::new(),
+            cursor: 0,
+            error: None,
+            running: false,
+        });
+        return None;
+    }
+
     // Ctrl+F (Cmd+F on macOS): open search in response panel
     if key.code == KeyCode::Char('f')
         && has_ctrl(key.modifiers, app.config.platform)
         && !api.responses.is_empty()
     {
+        api.jq = None;
         api.search = Some(crate::app::ApiSearchState {
             query: String::new(),
             cursor: 0,
@@ -1039,149 +689,222 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
         app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "select") {
         jump_to_agent(app, rows[app.selected_agent_row]);
+    } else if app.config.matches_agents(key, "broadcast") {
+        let count = rows.len();
+        let cursor = app.selected_agent_row.min(count.saturating_sub(1));
+        app.active_dialog = Some(DialogState::Broadcast {
+            rows,
+            selected: vec![false; count],
+            cursor,
+            input: String::new(),
+            input_cursor: 0,
+            step: 0,
+            append_enter: true,
+        });
+        app.mode = AppMode::Broadcast;
     }
     None
 }
 
-/// Keyboard navigation for the focused top-left pane. The pane hosts two
-/// tab views — Workspaces and Projects — and `workspaces.view` (default
-/// Tab) flips between them from either side; everything else routes to the
-/// active view's handler.
+/// Keyboard navigation for the focused top-left pane: the project tree.
+///
+/// One row model, one handler — `[keybindings.projects]` holds every key. The
+/// vertical keys move the cursor (follow-focus: landing on a checkout switches
+/// to it), the horizontal ones collapse/expand a project header, and the
+/// row-scoped keys act on whatever the cursor stands on.
 pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspaces(key, "view") {
-        app.toggle_sidebar_view();
-        return None;
-    }
-    if app.sidebar_view == crate::app::SidebarView::Projects {
-        return handle_projects_pane_interaction(app, key);
-    }
-    handle_workspaces_view_interaction(app, key)
-}
-
-/// The Projects tab: mirrors the Projects overlay's list keys (same
-/// `[keybindings.projects]` table) against the pane's own state — j/k move,
-/// Enter expands a project or jumps to / adopts a member, n/e/d manage
-/// projects through the same modal editor the overlay uses.
-fn handle_projects_pane_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let rows = app.projects_pane_rows();
-    if app.config.matches_projects(key, "down") || app.config.matches_projects(key, "down_alt") {
-        crate::input::list_nav::move_selection(&mut app.selected_project_row, rows.len(), 1, false);
-        app.reveal_projects_selection();
-    } else if app.config.matches_projects(key, "up") || app.config.matches_projects(key, "up_alt") {
-        crate::input::list_nav::move_selection(
-            &mut app.selected_project_row,
-            rows.len(),
-            -1,
-            false,
-        );
-        app.reveal_projects_selection();
-    } else if app.config.matches_projects(key, "new") {
+    let cfg = &app.config;
+    if cfg.matches_projects(key, "down") || cfg.matches_projects(key, "down_alt") {
+        app.select_next_sidebar_row();
+    } else if cfg.matches_projects(key, "up") || cfg.matches_projects(key, "up_alt") {
+        app.select_prev_sidebar_row();
+    } else if cfg.matches_projects(key, "collapse") || cfg.matches_projects(key, "collapse_alt") {
+        app.collapse_selected_group();
+    } else if cfg.matches_projects(key, "expand") || cfg.matches_projects(key, "expand_alt") {
+        app.expand_selected_group();
+    } else if cfg.matches_projects(key, "new") {
         super::dialog::open_project_editor_modal(app, None);
-    } else if rows.is_empty() {
-        // Row-scoped keys need a row.
-    } else if app.config.matches_projects(key, "select") {
-        return activate_project_row(app, rows[app.selected_project_row.min(rows.len() - 1)]);
-    } else if app.config.matches_projects(key, "edit") {
-        let pi = project_row_project(&rows[app.selected_project_row.min(rows.len() - 1)]);
-        let project = app.sidebar_projects.get(pi).cloned();
-        super::dialog::open_project_editor_modal(app, project);
-    } else if app.config.matches_projects(key, "delete") {
-        let pi = project_row_project(&rows[app.selected_project_row.min(rows.len() - 1)]);
-        if let Some(id) = app.sidebar_projects.get(pi).and_then(|p| p.id) {
-            return Some(Action::DeleteProject(id));
+    } else if cfg.matches_projects(key, "select") {
+        return activate_sidebar_row(app);
+    } else if cfg.matches_projects(key, "edit") {
+        let project = app.selected_project().cloned();
+        match project {
+            Some(p) => super::dialog::open_project_editor_modal(app, Some(p)),
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
         }
+    } else if cfg.matches_projects(key, "delete") {
+        match app.selected_project().and_then(|p| p.id) {
+            Some(id) => return Some(Action::DeleteProject(id)),
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
+        }
+    } else if cfg.matches_projects(key, "add_repo") {
+        // The New Workspace dialog does the work (local folder or GitHub
+        // clone); the project it lands in is remembered until creation
+        // finishes — see `App::pending_project_member`.
+        match app.selected_project().and_then(|p| p.id) {
+            Some(id) => {
+                app.pending_project_member = Some(id);
+                return super::app_actions::open_new_workspace(app);
+            }
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
+        }
+    } else if cfg.matches_projects(key, "new_worktree") {
+        return new_worktree_for_selected_repo(app);
+    } else if cfg.matches_projects(key, "membership") {
+        open_membership_picker(app);
     }
     None
 }
 
-/// The project a pane row acts on: a member row targets its parent.
-fn project_row_project(row: &crate::dialog_state::ProjectRow) -> usize {
-    match *row {
-        crate::dialog_state::ProjectRow::Project(pi)
-        | crate::dialog_state::ProjectRow::Member(pi, _) => pi,
+/// `membership`: put the row under the cursor into a project, or take it out.
+/// The TUI has no context menus, so this is the counterpart of the desktop row
+/// menu's "Add to / Remove from project X" — the only other way in was the
+/// project editor's member checklist, which means knowing which project you
+/// want *before* you can act on the row you are looking at.
+fn open_membership_picker(app: &mut App) {
+    let Some(row) = app.sidebar_rows().get(app.selected_sidebar_row).cloned() else {
+        return;
+    };
+    // Whatever the row stands for by path: a checkout, an unopened repo, or
+    // a directory member.
+    let (path, label) = match &row {
+        ProjectTreeRow::Checkout {
+            workspace_index, ..
+        } => {
+            let ws = &app.workspaces[*workspace_index];
+            (ws.info.path.clone(), ws.info.name.clone())
+        }
+        ProjectTreeRow::Repo { root, .. } | ProjectTreeRow::Dir { path: root, .. } => (
+            root.clone(),
+            root.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| root.to_string_lossy().to_string()),
+        ),
+        _ => {
+            app.set_toast(
+                "Select a checkout, a repo or a directory first",
+                crate::app::ToastLevel::Info,
+            );
+            return;
+        }
+    };
+    if app.sidebar_projects.is_empty() {
+        app.set_toast(
+            "No projects yet — create one first",
+            crate::app::ToastLevel::Info,
+        );
+        return;
     }
+    let rows = app
+        .sidebar_projects
+        .iter()
+        .map(|p| {
+            let member = p.members.iter().any(|m| m.path == path);
+            (p.clone(), member)
+        })
+        .collect();
+    app.active_dialog = Some(DialogState::ProjectMembership {
+        path,
+        label,
+        rows,
+        selected: 0,
+    });
+    app.mode = AppMode::Projects;
 }
 
-/// Enter/click on a Projects-tab row: toggle a project's expansion, jump to
-/// a member's workspace, or adopt a plain-directory member — the overlay's
-/// semantics, minus closing anything (the pane stays).
-pub(super) fn activate_project_row(
-    app: &mut App,
-    row: crate::dialog_state::ProjectRow,
-) -> Option<Action> {
+/// Shown when a project-scoped key lands on a synthetic bucket header (PR
+/// review / no project), which has no stored project behind it.
+const NO_PROJECT_HERE: &str = "Not a project row";
+
+/// `select` (Enter) on the row under the cursor: collapse/expand a project
+/// header, open a checkout, or adopt an unopened repo / plain-directory
+/// member.
+pub(super) fn activate_sidebar_row(app: &mut App) -> Option<Action> {
+    let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
     match row {
-        crate::dialog_state::ProjectRow::Project(pi) => {
-            if let Some(id) = app.sidebar_projects.get(pi).and_then(|p| p.id)
-                && !app.projects_expanded.remove(&id)
+        // A repository that is a member but has nothing loaded: the useful
+        // thing to do with it is open it. Registering its root picks up its
+        // real origin (`create_simple` reads the git remote), which is what
+        // the branch dialog needs.
+        ProjectTreeRow::Repo { root, .. } => Some(Action::ProjectAdoptDirectory { path: root }),
+        ProjectTreeRow::Project { .. } => {
+            app.toggle_selected_group();
+            None
+        }
+        ProjectTreeRow::Checkout {
+            workspace_index: idx,
+            ..
+        } => {
+            // A checkout with tabs open takes the focus with it; an empty one
+            // just becomes active, so the user can open a tab in it.
+            if app
+                .workspaces
+                .get(idx)
+                .is_some_and(|ws| !ws.tabs.is_empty())
             {
-                app.projects_expanded.insert(id);
+                app.switch_workspace_and_focus(idx);
+            } else {
+                app.switch_workspace(idx);
+            }
+            if app.workspaces.get(idx).is_some_and(|ws| ws.review_broken) {
+                return Some(Action::RetryReviewCheckout(idx));
             }
             None
         }
-        crate::dialog_state::ProjectRow::Member(pi, mi) => {
-            let path = app.sidebar_projects.get(pi)?.members.get(mi)?.path.clone();
-            match app.workspaces.iter().position(|w| w.info.path == path) {
-                Some(idx) => {
-                    app.switch_workspace_and_focus(idx);
-                    None
-                }
-                None => Some(Action::ProjectAdoptDirectory { path }),
-            }
-        }
+        // Membership stores only the path, so adopting the directory as a
+        // workspace upgrades this row in place with no migration.
+        ProjectTreeRow::Dir { path, .. } => Some(Action::ProjectAdoptDirectory { path }),
     }
 }
 
-/// The Workspaces tab (top-left tree). Mirrors the mouse behaviour in
-/// `mouse.rs`: up/down move the selection over the flattened sidebar rows
-/// (which always switches — every row is a real workspace), and `select`
-/// (Enter) additionally toggles collapse when the selection is a
-/// worktree-family parent row.
-fn handle_workspaces_view_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspaces(key, "down") || app.config.matches_workspaces(key, "down_alt")
+/// `new_worktree`: create a branch + worktree in the repository under the
+/// cursor. Works from a repo row and from any checkout of that repo, since
+/// both identify the same repository; the new worktree joins the project on
+/// its own (the tree adopts every worktree of a member repo).
+fn new_worktree_for_selected_repo(app: &mut App) -> Option<Action> {
+    let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
+    let repo = match &row {
+        ProjectTreeRow::Repo { root, .. } => root.clone(),
+        ProjectTreeRow::Checkout {
+            workspace_index, ..
+        } => app
+            .workspaces
+            .get(*workspace_index)?
+            .info
+            .source_repo
+            .clone(),
+        _ => {
+            app.set_toast("Select a repository first", crate::app::ToastLevel::Info);
+            return None;
+        }
+    };
+    // A branch created from inside a project joins it. Membership is never
+    // inferred from a shared repo (see `projects::tree`), so this is the one
+    // place that spares the user the bookkeeping — and only when they really
+    // were standing in a project.
+    app.pending_project_member = app.selected_project().and_then(|p| p.id);
+    // The create-worktree dialog works off a loaded checkout of the repo (it
+    // reads its origin and prompt), so a repo nobody has opened
+    // yet has nothing to branch from.
+    match app
+        .workspaces
+        .iter()
+        .position(|w| w.info.source_repo == repo && !w.info.ephemeral)
     {
-        app.select_next_sidebar_row();
-    } else if app.config.matches_workspaces(key, "up")
-        || app.config.matches_workspaces(key, "up_alt")
-    {
-        app.select_prev_sidebar_row();
-    } else if app.config.matches_workspaces(key, "collapse")
-        || app.config.matches_workspaces(key, "collapse_alt")
-    {
-        app.collapse_selected_group();
-    } else if app.config.matches_workspaces(key, "expand")
-        || app.config.matches_workspaces(key, "expand_alt")
-    {
-        app.expand_selected_group();
-    } else if app.config.matches_workspaces(key, "select") {
-        match app.sidebar_items().get(app.selected_sidebar_row) {
-            Some(crate::app::SidebarItem::Workspace { index, collapsed }) => {
-                let idx = *index;
-                let is_parent = collapsed.is_some();
-                if is_parent {
-                    app.switch_workspace(idx);
-                    app.toggle_selected_group();
-                } else if app
-                    .workspaces
-                    .get(idx)
-                    .is_some_and(|ws| !ws.tabs.is_empty())
-                {
-                    app.switch_workspace_and_focus(idx);
-                } else {
-                    app.switch_workspace(idx);
-                }
-                if app.workspaces.get(idx).is_some_and(|ws| ws.review_broken) {
-                    return Some(Action::RetryReviewCheckout(idx));
-                }
-            }
-            // Synthetic pr-review header has no backing workspace — just
-            // toggle collapse, same as Enter on a worktree-family parent.
-            Some(crate::app::SidebarItem::GroupHeader { .. }) => {
-                app.toggle_selected_group();
-            }
-            None => {}
+        Some(parent) => super::app_actions::open_create_worktree_for(app, parent),
+        // Nothing of this repo is loaded, so there is no origin or prompt to
+        // branch from yet. Open it — registering its root reads the real git
+        // remote — and say so, instead of refusing and leaving the user to
+        // guess what "open" means here.
+        None => {
+            app.pending_project_member = None;
+            app.set_toast(
+                "Opening the repository first — press again to branch it",
+                crate::app::ToastLevel::Info,
+            );
+            Some(Action::ProjectAdoptDirectory { path: repo })
         }
     }
-    None
 }
 
 /// Focus the given (workspace, tab) pair from the Agents pane.
@@ -1203,10 +926,9 @@ mod tests {
     use super::*;
     use crate::test_support::{add_terminal_tab, add_test_workspace, key, test_app};
 
-    /// Seed the sidebar's Projects tab directly (the JSON test storage has
-    /// no project backend, so `reload_sidebar_projects` would clear it).
-    fn seed_projects_pane(app: &mut App, member_paths: Vec<std::path::PathBuf>) {
-        app.sidebar_view = crate::app::SidebarView::Projects;
+    /// Seed the sidebar's project list directly (the JSON test storage has no
+    /// project backend, so `reload_sidebar_projects` would clear it).
+    fn seed_project(app: &mut App, member_paths: Vec<std::path::PathBuf>) {
         app.sidebar_projects = vec![piki_core::projects::Project {
             id: Some(1),
             name: "frontend".to_string(),
@@ -1214,56 +936,50 @@ mod tests {
             order: 0,
             members: member_paths
                 .into_iter()
-                .map(|path| piki_core::projects::ProjectMember { path })
+                .map(piki_core::projects::ProjectMember::new)
                 .collect(),
         }];
     }
 
-    /// `workspaces.view` (Tab) flips the top-left pane between its
-    /// Workspaces and Projects tabs from either side.
+    /// Enter on a project header collapses it; on a checkout it opens that
+    /// workspace.
     #[test]
-    fn tab_toggles_sidebar_view_both_ways() {
-        let mut app = test_app();
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Workspaces);
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Projects);
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Workspaces);
-    }
-
-    /// Enter on a project row expands it; on a member row it jumps to the
-    /// member's workspace when one is registered at that path.
-    #[test]
-    fn projects_pane_enter_expands_then_jumps() {
+    fn enter_collapses_a_project_then_opens_a_checkout() {
         let mut app = test_app();
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         app.active_workspace = a;
-        // The shared fixture gives every workspace the same path — the pane
-        // resolves members BY path, so give b its own.
+        // The shared fixture gives every workspace the same path — members
+        // resolve BY path, so give b its own.
         app.workspaces[b].info.path = std::path::PathBuf::from("/tmp/test-b");
         let b_path = app.workspaces[b].info.path.clone();
-        seed_projects_pane(&mut app, vec![b_path]);
+        seed_project(&mut app, vec![b_path]);
 
-        // Row 0 is the project: Enter expands it (member row appears).
+        // Rows: [project, b, a] — one checkout per repo (both hoisted), and
+        // `a` is loose so it sits at the top level with no header.
+        assert_eq!(app.sidebar_rows().len(), 3);
+        app.selected_sidebar_row = 0;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
-        assert!(app.projects_expanded.contains(&1));
-        assert_eq!(app.projects_pane_rows().len(), 2);
+        assert_eq!(
+            app.sidebar_rows().len(),
+            2,
+            "the collapsed project hides its checkout"
+        );
 
-        // Down to the member, Enter switches to its workspace.
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('j')));
+        // Re-expand, walk onto b's checkout row, open it.
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
+        app.selected_sidebar_row = 1;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
         assert_eq!(app.active_workspace, b);
     }
 
-    /// Enter on a member with no registered workspace adopts the directory
-    /// (same action the Projects overlay dispatches).
+    /// Enter on a plain-directory member adopts it as a workspace.
     #[test]
-    fn projects_pane_enter_adopts_unregistered_directory() {
+    fn enter_adopts_an_unregistered_directory_member() {
         let mut app = test_app();
-        seed_projects_pane(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
-        app.projects_expanded.insert(1);
-        app.selected_project_row = 1;
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
+        // Rows: [project, dir].
+        app.selected_sidebar_row = 1;
         let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
         assert!(matches!(
             action,
@@ -1271,16 +987,124 @@ mod tests {
         ));
     }
 
-    /// Delete on any row targets the row's project; a member row acts on
-    /// its parent.
+    /// Delete on any row targets the project that row belongs to.
     #[test]
-    fn projects_pane_delete_targets_parent_project() {
+    fn delete_targets_the_rows_project() {
         let mut app = test_app();
-        seed_projects_pane(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
-        app.projects_expanded.insert(1);
-        app.selected_project_row = 1;
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
+        app.selected_sidebar_row = 1; // the member row, not the header
         let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d')));
         assert!(matches!(action, Some(Action::DeleteProject(1))));
+    }
+
+    /// A synthetic bucket has no stored project, so the project-scoped keys
+    /// say so instead of acting on whatever happens to be nearby.
+    #[test]
+    fn project_keys_are_inert_on_a_synthetic_bucket() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        // No projects: row 0 is a loose repo, which belongs to no project.
+        app.selected_sidebar_row = 0;
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d'))).is_none());
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('e'))).is_none());
+        assert!(app.active_dialog.is_none(), "no editor opened");
+    }
+
+    /// The membership picker is the TUI's answer to the desktop row menu's
+    /// "Add to project X": it opens on a checkout and offers every project.
+    #[test]
+    fn membership_picker_opens_on_a_checkout_and_marks_current_members() {
+        let mut app = test_app();
+        let a = add_test_workspace(&mut app);
+        app.workspaces[a].info.path = std::path::PathBuf::from("/wt/a");
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/other")]);
+        // Rows: [project, dir(other), a]. Stand on the loose checkout.
+        app.selected_sidebar_row = 2;
+
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('m')));
+
+        let Some(crate::dialog_state::DialogState::ProjectMembership {
+            ref path, ref rows, ..
+        }) = app.active_dialog
+        else {
+            panic!(
+                "expected the membership picker, got {:?}",
+                app.active_dialog
+            );
+        };
+        assert_eq!(path, &std::path::PathBuf::from("/wt/a"));
+        assert_eq!(rows.len(), 1);
+        assert!(!rows[0].1, "not a member yet");
+    }
+
+    /// Enter on the picker toggles membership and hands the save to the
+    /// action layer.
+    #[test]
+    fn membership_picker_enter_adds_the_row_to_the_project() {
+        let mut app = test_app();
+        let a = add_test_workspace(&mut app);
+        app.workspaces[a].info.path = std::path::PathBuf::from("/wt/a");
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/other")]);
+        app.selected_sidebar_row = 2;
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('m')));
+
+        let action = super::super::dialog::handle_projects_input(&mut app, key(KeyCode::Enter));
+
+        let Some(Action::SaveProject(project)) = action else {
+            panic!("expected SaveProject, got {action:?}");
+        };
+        assert!(
+            project
+                .members
+                .iter()
+                .any(|m| m.path == std::path::Path::new("/wt/a")),
+            "the checkout joined: {:?}",
+            project.members
+        );
+        assert!(app.active_dialog.is_none(), "the picker closed");
+    }
+
+    /// A member repository with nothing loaded has no origin to branch from.
+    /// Opening it is the useful move, not refusing.
+    #[test]
+    fn an_unopened_repo_row_opens_instead_of_refusing() {
+        let mut app = test_app();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "frontend".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember::repo(
+                std::path::PathBuf::from("/repos/web"),
+            )],
+        }];
+        // Rows: [project, repo(web)] — the repo has nothing loaded.
+        app.selected_sidebar_row = 1;
+
+        // Enter opens it...
+        let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
+        assert!(matches!(
+            action,
+            Some(Action::ProjectAdoptDirectory { ref path }) if path == std::path::Path::new("/repos/web")
+        ));
+
+        // ...and so does asking for a branch, rather than a dead end.
+        let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Char('w')));
+        assert!(matches!(
+            action,
+            Some(Action::ProjectAdoptDirectory { ref path }) if path == std::path::Path::new("/repos/web")
+        ));
+    }
+
+    /// `new_worktree` needs a repository under the cursor; on a bucket header
+    /// it is a no-op rather than guessing one.
+    #[test]
+    fn new_worktree_needs_a_repository_row() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        app.selected_sidebar_row = 0;
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('w'))).is_none());
+        assert!(app.active_dialog.is_none());
     }
 
     /// Typing into the terminal snaps a wheel-scrolled view back to live:
@@ -1309,5 +1133,138 @@ mod tests {
                 .term_scroll,
             0
         );
+    }
+
+    // ── API Explorer: the jq filter bar ──
+
+    /// An API tab with one response, which is what the jq bar needs to open.
+    fn api_tab_with_response(app: &mut App) -> usize {
+        let ws = add_test_workspace(app);
+        let idx = app.workspaces[ws].add_tab(piki_core::AIProvider::Api, true, None);
+        let mut api = crate::app::ApiTabState::new();
+        api.responses = vec![crate::app::ApiResponseDisplay {
+            status: 200,
+            elapsed_ms: 3,
+            body: "{\"a\":1}".to_string(),
+            headers: String::new(),
+        }];
+        app.workspaces[ws].tabs[idx].api_state = Some(api);
+        app.workspaces[ws].active_tab = idx;
+        ws
+    }
+
+    fn api_of(app: &App) -> &crate::app::ApiTabState {
+        app.workspaces[app.active_workspace]
+            .current_tab()
+            .expect("api tab")
+            .api_state
+            .as_ref()
+            .expect("api state")
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    #[test]
+    fn jq_bar_opens_types_and_runs() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+
+        handle_api_interaction(&mut app, ctrl('q'));
+        assert!(api_of(&app).jq.is_some(), "the bar should be open");
+
+        for c in ".a".chars() {
+            handle_api_interaction(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(api_of(&app).jq.as_ref().unwrap().query, ".a");
+
+        let action = handle_api_interaction(&mut app, key(KeyCode::Enter));
+        match action {
+            Some(Action::RunJqFilter(filter)) => assert_eq!(filter, ".a"),
+            other => panic!("expected RunJqFilter, got {other:?}"),
+        }
+    }
+
+    /// Esc drops the filter as well as the bar, so what is on screen always
+    /// matches what the panel says it is showing.
+    #[test]
+    fn jq_esc_closes_and_restores_the_raw_response() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+        app.workspaces[0]
+            .current_tab_mut()
+            .unwrap()
+            .api_state
+            .as_mut()
+            .unwrap()
+            .jq_output = Some(vec!["1".to_string()]);
+
+        handle_api_interaction(&mut app, key(KeyCode::Esc));
+
+        assert!(api_of(&app).jq.is_none());
+        assert!(api_of(&app).jq_output.is_none());
+    }
+
+    #[test]
+    fn jq_ctrl_u_clears_the_query() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+        handle_api_interaction(&mut app, key(KeyCode::Char('.')));
+
+        handle_api_interaction(&mut app, ctrl('u'));
+
+        let jq = api_of(&app).jq.as_ref().unwrap();
+        assert!(jq.query.is_empty());
+        assert_eq!(jq.cursor, 0);
+    }
+
+    /// The bar owns the keyboard while it is open, but a chord it does not
+    /// implement must not end up typed into the filter.
+    #[test]
+    fn jq_bar_swallows_chords_instead_of_typing_them() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        handle_api_interaction(&mut app, ctrl('f'));
+
+        assert!(api_of(&app).jq.is_some(), "the bar stays open");
+        assert!(
+            api_of(&app).jq.as_ref().unwrap().query.is_empty(),
+            "ctrl-f must not type an 'f'"
+        );
+        assert!(api_of(&app).search.is_none());
+    }
+
+    /// C-j / C-k keep scrolling the response while the filter bar has focus.
+    #[test]
+    fn jq_bar_leaves_the_scroll_chords_live() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        handle_api_interaction(&mut app, ctrl('j'));
+        assert_eq!(api_of(&app).response_scroll, 1);
+        handle_api_interaction(&mut app, ctrl('k'));
+        assert_eq!(api_of(&app).response_scroll, 0);
+        assert!(api_of(&app).jq.as_ref().unwrap().query.is_empty());
+    }
+
+    /// Nothing to filter yet: the chord must not open a bar over an empty
+    /// panel.
+    #[test]
+    fn jq_bar_does_not_open_without_a_response() {
+        let mut app = test_app();
+        let ws = add_test_workspace(&mut app);
+        let idx = app.workspaces[ws].add_tab(piki_core::AIProvider::Api, true, None);
+        app.workspaces[ws].tabs[idx].api_state = Some(crate::app::ApiTabState::new());
+        app.workspaces[ws].active_tab = idx;
+
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        assert!(api_of(&app).jq.is_none());
     }
 }

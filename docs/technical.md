@@ -78,6 +78,14 @@ piki-multi-ai sessions stop            # stop the daemon (kills every session)
 
 The desktop binary exposes the same daemon entry point as `piki-desktop --serve-sessions` (parsed before Tauri starts). Both frontends launch it automatically; which binary happens to serve is irrelevant — they speak the same protocol against the same socket.
 
+#### `doctor`
+
+Read-only health check for scripting and bug reports: startup dependencies (`git`, `lazygit`, `claude`, `jq`), optional extras (`gh`, `rg`), the session daemon (running + session count, or politely absent), the SQLite database (`integrity_check` when the file exists), the `providers.toml` parse, and data/worktree directory writability. Prints one `[ok|warn|err]` line per check plus a summary; exits non-zero only on errors:
+
+```bash
+piki-multi-ai doctor
+```
+
 ## On-disk layout
 
 All paths are centralized in `piki-core::paths::DataPaths`. Two roots exist: the **data dir** (`$XDG_DATA_HOME/piki-multi`, i.e. `~/.local/share/piki-multi`) and the **config dir** (`~/.config/piki-multi`). With `--data-dir <PATH>`, *both* resolve under that path, giving a fully isolated instance (own database, own worktrees, own config, own session daemon).
@@ -135,13 +143,13 @@ Internal — set by piki for its child processes; documented so they can be reco
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       | [▸ Claude Code ×] [$ Shell ×] +   (tab blocks + new)  |
+| PROJECTS         | [▸ Claude Code ×] [$ Shell ×] +   (tab blocks + new)  |
 |                  |-------------------------------------------------------|
-|  ▼ frontend (2)  |                                                       |
-|  ▶ ⎇ ws-1  3∆ ↑1 |  AI assistant live terminal output                    |
-|    ⎇ ws-2        |  (Ctrl+G c or click + to open a new tab)              |
-|  ▸ backend (1)   |                                                       |
-|                  |                                                       |
+| ▾ ● frontend 3   |                                                       |
+|     ◉ piki (main)|  AI assistant live terminal output                    |
+|     ⎇ piki (ws-1)|  (Ctrl+G c or click + to open a new tab)              |
+|     ⎇ api (main) |   (one checkout → one row, branch alongside)          |
+| ⎇ dirb (main)    |   (in no project: top level, no header)               |
 |------------------+                                                       |
 | AGENTS           |-------------------------------------------------------|
 | ▷ ws-1 · Claude  | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
@@ -150,14 +158,18 @@ Internal — set by piki for its child processes; documented so they can be reco
 |                  |
 +------------------+--------------------------------------------------------+
   Footer keys change per focused pane. Examples:
-  Workspace list: [k/j] select [enter] open [e] edit ws [d] delete ws [C-g] prefix
+  Projects tree:  [k/j] select [enter] open [a] add repo [w] new branch [C-g] prefix
   Agents:         [k/j] navigate [enter] jump to agent [C-g] prefix
   Main panel:     [ctrl-shift-f] search [C-g [] scroll [C-g ?] help [C-g] prefix
 ```
 
-The top-left pane is a **tab bar hosting two views — WORKSPACES and PROJECTS** (both labels show in its border when the pane is wide enough; click one, or press `Tab` with the pane focused, to flip). The Workspaces tab is the tree above; the Projects tab lists the same cross-repo groups as the desktop's Projects view and the `C-g C-p` overlay — `j`/`k` move, `Enter` expands a project or opens/adopts a member, `n`/`e`/`d` create/edit/delete through the same editor dialog. The chosen tab persists across restarts, so the pane always opens on the view you prefer.
+The top-left pane is the **project tree** — the one sidebar view. It has two levels: a **project** header (name, colour dot, checkout count), then one flat row per member. Every loaded checkout is its own row, named after its repository folder with the branch alongside — the clone leading its worktrees, a second worktree adding a second row rather than nesting under anything. A clone with worktree rows beside it carries a filled disc (`◉`) instead of the hollow one (`○`), so the parent reads apart from lone checkouts and from its own children (`⎇`). An explicit repository member with nothing loaded renders as a single dimmed repo row ("not open"), adopted as a workspace on `Enter`; a member path with no workspace registered at it renders as a dimmed directory row and is adopted the same way.
 
-The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`).
+One project can hold repositories from different places, and the same repository can belong to several projects — the project is a *view*, never the owner of the layout on disk (worktrees stay under `<data_dir>/worktrees/<repo>/`). A repository in no project is **not** wrapped in one: it renders at the top level after the projects, so nothing is unreachable and no group exists that you didn't make. The one synthetic group left is **pr-review**, which collects the ad-hoc PR-review checkouts under a header of its own. Collapsing a project surfaces what it hides on the header row (idle dot, agent-status glyph, changed-file count, ahead/behind) instead of losing it — which rows that *is* comes from `projects::tree::hidden_checkouts`, so it follows membership rather than a shared repository.
+
+Keys (`[keybindings.projects]`): `j`/`k` move — follow-focus, so landing on a checkout switches to it while header rows only move the cursor —, `h`/`l` collapse/expand, `Enter` opens the checkout / collapses a group / adopts a directory, `n`/`e`/`d` create/edit/delete a project, `a` adds a repository to the project under the cursor (the Add Repository dialog, with the result joining that project), `w` creates a branch + worktree in the repository under the cursor and it joins the project you were standing in, and `m` opens the membership picker — every project with a checkbox for whether this row is in it, `Enter` toggles. `m` is the TUI's counterpart of the desktop row menu's *Add to / Remove from project X*; without it the only way into a project was the editor's member checklist, which means knowing which project you want before you can act on the row in front of you. A repository that is a member but has nothing loaded (an explicit repo member) has no origin to branch from, so `Enter` and `w` both **open** it first — registering its root reads the real git remote — instead of refusing. Collapse state is persisted, so a folded project stays folded across restarts.
+
+The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`). In the tab bar, a tab whose process has exited keeps its slot and is marked with a dim `○` — `Ctrl+G C-r` re-spawns it in place (same provider, same slot, same custom title).
 
 ## TUI keybindings
 
@@ -170,34 +182,38 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 <!-- BEGIN:prefix-keys -->
 | Key | Action |
 |-----|--------|
-| `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to workspace list) |
+| `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to the project tree) |
 | `c` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →) |
 | `x` | Close current tab (with confirmation dialog) |
 | `n` / `p` | Next / previous tab |
 | `1`..`9` | Jump to tab N |
-| `w` | Workspace switcher (tree of workspaces + tabs; type to filter, Enter to jump) |
+| `w` | Checkout switcher (tree of checkouts + tabs; type to filter, Enter to jump) |
 | `}` / `{` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
-| `s` | Create new workspace |
-| `e` | Edit workspace options (Kanban path, Prompt) |
-| `d` | Delete the selected workspace (with confirmation dialog) |
-| `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
-| `r` | Create Worktree (GitHub-only): spawn a new git worktree from the selected GitHub-origin workspace (inheriting prompt/kanban), or load an existing worktree of the repo from a list (clamped to the screen, auto-scrolls to the selection) |
+| `s` | Add a repository (existing folder, or clone from GitHub) |
+| `e` | Edit the checkout's prompt |
+| `d` | Delete the selected checkout (with confirmation dialog) |
+| `i` | Checkout info overlay (branch, paths, description, prompt; mouse-copyable) |
+| `r` | New Branch (GitHub-only): spawn a new git worktree from the selected GitHub-origin repository (inheriting the prompt), or load an existing worktree of the repo from a list (clamped to the screen, auto-scrolls to the selection) |
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
 | `t` | Search in project (ripgrep content search; Enter opens `$EDITOR` at the matched line) |
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
+| `C-k` | Clear the active terminal — screen and scrollback. The process is untouched, so a full-screen program repaints on its next output |
 | `y` | AI Chat panel |
+| `C-y` | Add the terminal selection to the AI chat (drag-select first; the block lands in the composer and the panel opens) |
 | `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
-| `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `b` | Dashboard overlay (bird's-eye view of every checkout and its tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
-| `C-p` | Projects overlay (cross-repo groups with a colour; Enter expands or jumps, n/e/d manage) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
+| `C-a` | Jump to the agent needing you (waiting for permission first, then unseen news; press again to walk through the rest) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
 | `R` | Rename current tab (custom title, empty to clear; reflected in Agents pane) |
+| `C-w` | Move the current tab to another workspace (shell and agent tabs only; the process keeps running untouched, so it also keeps the cwd it was started in) |
+| `C-r` | Restart the current tab's process after it exited — same provider, same slot in the tab bar, same custom title (the exited daemon session is dropped, not left as an orphan) |
 | `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
 | `+` / `-` (or `=`) | Resize workspace/file split (±10%) |
 | `a` | About overlay |
@@ -216,34 +232,13 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Pane | Keys |
 |------|------|
 | *Terminal pane* | All keys forwarded to the active tab; `Ctrl+G f` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
-| *Workspace list — Workspaces tab* | `j`/`k` select (follow-focus: selecting switches), `Enter` switch + focus main panel (or toggle collapse on a family parent), `h`/`l` collapse/expand a worktree family, `Tab` flip to the Projects tab |
-| *Workspace list — Projects tab* | `j`/`k` move, `Enter` expand a project / open or adopt a member, `n`/`e`/`d` new/edit/delete project, `Tab` back to Workspaces |
-| *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab |
+| *Projects pane (sidebar tree)* | `j`/`k` move (follow-focus: landing on a checkout switches to it), `Enter` open the checkout / collapse a project or repo / adopt a directory member / open an unopened repository, `h`/`l` collapse/expand, `n`/`e`/`d` new/edit/delete project, `a` add a repository to this project, `w` new branch + worktree in this repository, `m` add this row to a project (or remove it) |
+| *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab, `b` broadcast one input line to several agents |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
-| *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
-| *Code Review tab* | Locked mode — see [Code Review](#code-review) below |
-| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+H` API history, `Ctrl+C` copy response, mouse scroll in editor/response |
 
-**In kanban card editor** (after pressing `e` or `n`):
+**In broadcast dialog** (after pressing `b` in the Agents pane — same in the desktop Agents panel, which sends via `write_pty` per tab):
 
-| Key | Action |
-|-----|--------|
-| `Left` / `Right` | Move cursor within field |
-| `Home` / `End` | Jump to start / end of field |
-| `Backspace` / `Delete` | Delete char before / at cursor |
-| `Tab` | Switch between Title and Description |
-| `Enter` | Save card |
-| `Esc` | Cancel editing |
-
-**In dispatch agent dialog** (after pressing `D` on a kanban card):
-
-| Key | Action |
-|-----|--------|
-| `Left` / `Right` | Cycle agent/provider; includes `(None)` option when agents are configured |
-| `Tab` | Next agent/provider |
-| Any text | Type additional prompt (appended to card description) |
-| `Enter` | With agent: dispatch to new worktree. With `(None)` or raw provider: choose workspace destination (New/Current) |
-| `Esc` | Cancel (step 1) or Back (step 2) |
+Step 0 — agent multi-select checklist (`Space` toggle, `a` all/none, `j`/`k` move, `Enter` next, `Esc` cancel). Step 1 — type the line (`Tab` toggles append-Enter, default on; `Enter` sends, `Esc` back). Nothing checked sends to the highlighted agent alone. The text is written to each tab's PTY verbatim, so `/stop` stops every selected agent at once.
 
 **In manage agents overlay** (after pressing `A`):
 
@@ -334,6 +329,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `Ctrl+e` | Open in $EDITOR |
 | `Ctrl+v` | Open in inline editor |
 | `Ctrl+o` | Open markdown file in a new tab (`.md` / `.markdown` only) |
+| `Ctrl+y` | Send the selected file to the AI chat as context (fenced block, capped at 200 lines) |
 | `Alt+m` | Open markdown file in external `mdr` viewer |
 | `Esc` | Close search |
 
@@ -349,15 +345,18 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 | Action | Effect |
 |--------|--------|
-| Click workspace list | Switch to the clicked workspace (focus moves to the main panel; empty click just focuses the main panel) |
+| Click a checkout row | Switch to that workspace (focus stays on the tree) |
+| Click a project header | Collapse or expand it — headers carry no workspace, so nothing switches |
+| Click an unopened repository row | Adopt it as a workspace and open it |
+| Click a directory member row | Adopt it as a workspace and open it |
 | Click agents pane | Jump to the clicked agent's workspace/tab (focus moves to the main panel; empty click just focuses the main panel) |
 | Click main panel | Focus pane and start text selection |
 | Click tab | Switch to that tab |
 | Click × on tab | Close that tab (with confirmation) |
 | Click + after the tabs | Open the New Tab dialog |
-| Scroll in workspace list | Scroll the list viewport (selection — and workspace — never move) |
+| Scroll in the project tree | Scroll the viewport (selection — and workspace — never move) |
 | Scroll in agents pane | Scroll the pane viewport (selection never moves) |
-| Click in workspace list / agents pane | Perform the row action and focus that pane |
+| Click in the project tree / agents pane | Perform the row action and focus that pane |
 | Click on subtab | Switch tab and focus the main panel |
 | Scroll in main panel | Scroll terminal scrollback/markdown (includes inline-TUI transcripts like Codex); forwarded as escape sequences to alt-screen TUI apps |
 | Scroll in Help overlay | Scroll overlay content |
@@ -457,7 +456,7 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 
 ## Desktop application
 
-`piki-desktop` is the Tauri v2 GUI over the same `piki-core` and SQLite database as the TUI. This section is the user-facing reference for it; the implementation rules live in `crates/desktop/CLAUDE.md` and the internals in [Desktop internals](#desktop-internals).
+`piki-desktop` is the Tauri v2 GUI over the same `piki-core` and SQLite database as the TUI. This section is the user-facing reference for it; the implementation rules live in `crates/desktop/AGENTS.md` and the internals in [Desktop internals](#desktop-internals).
 
 ### Desktop layout
 
@@ -465,27 +464,27 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 +-------------------------------------------------------------------------------+
 | File  Edit  View  Git  Agents  Chat  Tools  Help                     menu bar |
 +---+----------------------+----------------------------------------+-----------+
-| E | WORKSPACES      ⋯    | [$ zsh ✓] [▸ Claude ●] [main.rs] + ⋯   |           |
-| x |  ▾ frontend (2)      |----------------------------------------|  AI Chat  |
-| p |   ⎇ ws-1  3∆ ↑1  ●   | pane: shell        | pane: Claude Code |  (toggle, |
-| l |   ⎇ ws-2             |                    |                   |   floats  |
-| F |  ▸ backend (1)       |                    |                   |   under   |
-| i |----------------------|--------------------+-------------------|   1000px) |
-| l | AGENTS               | pane: blank → Shell / providers /      |           |
-| e |  ▷ ws-1 · Claude 3m  |       Web Preview / Kanban / API /     |           |
-| s |  ✓ api · Claude      |       Open file…                       |           |
-| S |                      |                                        |           |
-| C |                      |                                        |           |
+| P | PROJECTS       ● +   | [$ zsh ✓] [▸ Claude ●] [main.rs] + ⋯   |           |
+| r | ▾ ● frontend     3   |----------------------------------------|  AI Chat  |
+| o |   ▾ ⎇ piki           | pane: shell        | pane: Claude Code |  (toggle, |
+| j |   │ ○ main           |                    |                   |   floats  |
+| F |   │ ⎇ ws-1 3∆ ↑1 ●   |                    |                   |   under   |
+| i |   ▾ ⎇ api            |                    |                   |   1000px) |
+| l |   │ ○ main           |                    |                   |           |
+| e |----------------------|--------------------+-------------------|           |
+| s | AGENTS               | pane: blank → Shell / providers /      |           |
+| S |  ▷ ws-1 · Claude 3m  |       Web Preview / API /            |           |
+| C |  ✓ api · Claude      |       Open file…                       |           |
 +---+----------------------+----------------------------------------+-----------+
 | ⎇ ws-1  3 files ↑1 · ~/git/frontend · Claude: running · ● 1 need you · sessions 4 · LSP |
 +-------------------------------------------------------------------------------+
 ```
 
 - **Menu bar** — File / Edit / View / Git / Agents / Chat / Tools / Help; every entry shows its current shortcut.
-- **Activity bar** — Workspaces, Projects (see [Projects](#projects)), Files, Source Control, Agents (opens the agent-profile manager), Kanban, API Explorer, Web Preview; an amber badge on the Workspaces icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
-- **Sidebar** — the switchable view (workspace list with `⋯` / right-click menus, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Below those rows, an *External* section lists agent CLIs running outside piki (found by scanning `/proc` every 2 s, grouped by process tree, mapped to a workspace by cwd — `Outside` when none matches; the Claude Desktop app, Electron helper processes and browser native-messaging hosts are filtered out as noise) — display-only, except a play button that opens a terminal at the process's cwd. The panel's height is draggable; the workspace list above keeps its header plus at least four rows.
+- **Activity bar** — Projects (the sidebar tree, see [Projects](#projects)), Files, Source Control, Agents (opens the agent-profile manager), API Explorer, Web Preview; an amber badge on the Projects icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
+- **Sidebar** — the switchable view (the project tree with `⋯` / right-click menus per row, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Below those rows, an *External* section lists agent CLIs running outside piki (found by scanning `/proc` every 2 s, grouped by process tree, mapped to a workspace by cwd — `Outside` when none matches; the Claude Desktop app, Electron helper processes and browser native-messaging hosts are filtered out as noise) — display-only, except a play button that opens a terminal at the process's cwd. The panel's height is draggable; the tree above keeps its header plus at least four rows.
 - **Tab bar** — one strip per workspace: the chips scroll, `+` (new blank tab) and `⋯` (every tab of the workspace, agent status, current one marked) stay put. Tab chips show the shell's ✓/✗ exit badge, an agent dot, a bell flash and a dim `○` when the process exited.
-- **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, kanban board, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
+- **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
 - **Status bar** — branch (click to switch), changed files and ahead/behind, the active shell's cwd, the active agent's status, `● N need you`, the `sessions N` segment (click to manage), LSP state, and a terminal button at the right corner that toggles the drop-down terminal (see below). Segments ellipsize instead of overflowing.
 - **Drop-down terminal** — ``Ctrl+Shift+` ``, the status-bar terminal button, View ▸ Toggle Terminal or the palette open a single Quake-style shell that slides up over the editor from just above the status bar. It is rooted at `~` and belongs to no workspace — the same instance whatever workspace is active — and runs in-process (it does not persist across an app restart). Drag its top edge to resize (height persisted); the same key again or the close button hides it without killing the shell; typing `exit` drops it and the next toggle starts a fresh one.
 - **Chat** — the AI chat panel docks to the right; below 1000px wide it floats over the editor.
@@ -500,18 +499,19 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 |---|---|
 | **General** | |
 | `Ctrl+Shift+P` | Command Palette |
-| `Alt+N` | New Workspace |
-| `Alt+W` | Workspace Switcher |
+| `Alt+N` | Add Repository |
+| `Alt+W` | Switch Checkout |
 | `Alt+D` | Dashboard |
+| `Alt+]` / `Alt+[` | Next Checkout / Previous Checkout — in sidebar order, wrapping at both ends, with whatever a collapsed project or repository hides skipped (the TUI's `prefix }` / `{`) |
+| ``Alt+` `` | Toggle Last Checkout — back to the one visited before this one (the TUI's `` prefix ` ``); some desktop environments claim this chord, so rebind it in Settings ▸ Shortcuts if it never arrives |
 | `?` ° | Keyboard Shortcuts (help dialog, generated from the same registry as this table) |
 | `Ctrl+,` ° | Settings |
 | `Esc` | Close Dialog / Overlay |
-| `Alt+1…9` | Switch to Workspace N |
-| `Right-click workspace` | Workspace menu (open, agents, info, edit, merge, delete) — also the row's `⋯` |
+| `Alt+1…9` | Switch to Checkout N |
+| `Right-click a row` | Row menu (open, agents, info, edit, new branch, merge, delete) — also the row's `⋯` |
 | **View & Panels** | |
 | `Alt+S` | Toggle Sidebar |
 | ``Ctrl+Shift+` `` | Toggle Drop-down Terminal — a single shell rooted at `~`, independent of any workspace, sliding up over the editor; the same key closes it while it has focus |
-| `Alt+K` | Kanban Board |
 | `Alt+Shift+W` | Open Web Preview |
 | `Alt+T` | Theme Settings |
 | `Alt+P` | Manage Providers |
@@ -551,6 +551,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+Shift+R` | Split Pane Right |
 | `Alt+Shift+D` | Split Pane Down |
 | `Ctrl+Shift+Q` | Close Active Pane |
+| `Ctrl+Shift+1…9` | Switch to Tab N — the workspace's Nth top-level tab (the TUI's `prefix 1..9`); matched on the physical digit, so the layout's shifted character doesn't matter |
 | `Ctrl+Tab` | Next Tab |
 | `Ctrl+Shift+Tab` | Previous Tab |
 | `Drag divider` | Resize split |
@@ -573,7 +574,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+I` | Quick Edit (in file viewer) |
 | `Ctrl+E` | Open in $EDITOR (in file viewer / search results) |
 | `Ctrl+S` | Save file (in editor) |
-| `Ctrl+F` | Find in file (CodeMirror) |
+| `Ctrl+F` | Find in file (editor tab / file viewer) — CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches. The markdown viewer has its own `<mark>` find bar with the same keys |
 <!-- END:desktop-shortcuts -->
 
 ° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`, and copy/paste are `⌘+C` / `⌘+V`. The rows from `Esc` downwards in each group that never appear in Settings ▸ Shortcuts (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime in Settings ▸ Shortcuts. This table is checked against the shortcut registry by the frontend's `docs-parity.test.ts`: every default key and action name must appear here, and no `Ctrl+…` / `Alt+…` key may be listed that nothing defines.
@@ -596,24 +597,26 @@ Desktop-only preferences (sidebar and chat widths, Agents-panel height, dialog s
 
 - **Tab bar**: the chips scroll in their own strip; `+` (new blank tab) and `⋯` (all tabs) sit outside it and stay visible with any number of tabs. The `×` is dim on inactive tabs, full on hover/active. Every close path — `×`, middle-click, the menu, `Close Tab` — goes through the same teardown, so a live process always gets the Close / Keep running / Cancel dialog (see [Persistent sessions](#persistent-sessions)). *Move to workspace…* (tab menu, File menu, palette) offers only terminal/agent tabs (editors, boards and previews are bound to their workspace's files): the backend re-parents the tab with its process untouched — a daemon session also gets its `workspace_path` re-pointed so the next launch restores it in the new workspace — and the app switches to the target with the moved tab in front.
 - **Renaming**: double-click a tab (or *Rename* in its menu) for an inline input — Enter commits, Esc cancels, empty clears. A rename always wins over the title a program sets (OSC 0/2), which is otherwise the fallback label; the Agents panel keeps the provider label.
-- **Workspace rows** align their labels behind a fixed leading gutter — the chevron on a worktree family's parent, the pulsing dot on the active row, empty otherwise. Clicking anywhere on a parent row toggles its family's collapse (and switches to the parent); the chevron slot toggles without switching — a clone shows its branch dimmed after the repo folder name, and worktree children indent one step deeper. Each row carries one `⋯` (plus right-click): Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase (switches to that workspace first), Delete. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
-- **Workspace switcher** (`Alt+W`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
-- **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
-- **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider, then *Web Preview* / *Kanban Board* / *API Explorer* and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
+- **Tree rows** align their labels behind a fixed leading gutter and indent by their own depth (one step in under a project header, top level when loose); the active row is carried by its background tint, no separate marker. A **project header** collapses from anywhere on the row (there is no workspace behind it to switch to). A **checkout** row — every git checkout is its own row, named after the repository folder with its branch dimmed beside it — switches to it on click. A primary with worktree rows beside it paints its name semibold (`family-parent`) and carries an explicit badge (the stacked-windows glyph, `workspace-parent`), so the parent reads apart from lone checkouts and from its children without depending on font rendering. A **repository member with nothing loaded** ("not open") and a **directory member** (a path with no checkout registered) are dimmed and adopted on click. Each row carries one `⋯` (plus right-click): a checkout gets Open, Agents, Info, Edit, New Branch / Worktree (GitHub-only — a Source dropdown picks *Create New* (spawns a worktree, inheriting the parent's prompt, mirroring `git worktree add`) or *Load Existing* (lists worktrees already on disk for the repo via `git worktree list`, filtered to ones not registered yet, and registers the picked one without touching git — same choice as the TUI's `prefix r`)), Merge / Rebase (switches to it first), the per-project membership toggles, and Delete; a repository or directory member row gets Open (adopt), Remove from project and Edit Project…; a project header gets Add Repository, Edit / New / Delete Project. Anything created from inside a project becomes a member of it. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the checkout's kind (a worktree loses its worktree and branch; a clone or plain folder only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
+- **Workspace navigation without the switcher**: `Alt+]` / `Alt+[` step to the next / previous workspace in the order the sidebar shows them — a collapsed project is skipped whole, because its checkouts are not rows — wrapping at both ends; ``Alt+` `` jumps back to the workspace visited before the current one. The last-workspace target is the most recently used workspace that still exists (the same MRU list the switcher ranks with), so deleting a workspace doesn't break the toggle. All three are also in View ▸ and the palette, and are disabled with fewer than two workspaces.
+- **Checkout switcher** (`Alt+W`): with an empty query the most recently used checkout is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
+- **Branch labels** share one rule everywhere (project tree, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
+- **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider, then *Web Preview* / *API Explorer* and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
 
 ### Desktop panes and content
 
-- **Any content in any pane**: a top-level tab owns a tree of panes and each pane holds exactly one content — a shell, an agent, a code / markdown editor, the web preview, the kanban board or the API explorer. Split (`Ctrl+\`, `Ctrl+Shift+\`, the header buttons) makes a blank pane whose chooser opens the pick *into that pane*; from a tab-less workspace the same chooser opens a new top-level tab, and the menu bar, palette, sidebar icons and file tree keep opening new top-level tabs. *Open file…* from a blank pane runs the fuzzy finder scoped to that pane (`Enter` editor, `Ctrl+E` `$EDITOR` shell, both land in the pane).
-- **Singletons**: Kanban, API Explorer and Web Preview are one-per-workspace. Picking one from a blank pane while it is open elsewhere asks **Move here** (the content is re-parented; its old pane collapses into its sibling, or its old tab goes when that was the only pane) / **Go there** / Cancel; from the menu or palette the existing one is simply focused.
+- **Any content in any pane**: a top-level tab owns a tree of panes and each pane holds exactly one content — a shell, an agent, a code / markdown editor, the web preview or the API explorer. Split (`Ctrl+\`, `Ctrl+Shift+\`, the header buttons) makes a blank pane whose chooser opens the pick *into that pane*; from a tab-less workspace the same chooser opens a new top-level tab, and the menu bar, palette, sidebar icons and file tree keep opening new top-level tabs. *Open file…* from a blank pane runs the fuzzy finder scoped to that pane (`Enter` editor, `Ctrl+E` `$EDITOR` shell, both land in the pane).
+- **Singletons**: API Explorer and Web Preview are one-per-workspace. Picking one from a blank pane while it is open elsewhere asks **Move here** (the content is re-parented; its old pane collapses into its sibling, or its old tab goes when that was the only pane) / **Go there** / Cancel; from the menu or palette the existing one is simply focused.
 - **Exited processes**: a tab whose process exited shows a dimmed `○` chip and a *Restart* button in its pane header that respawns the same provider in the same pane, keeping a custom title.
-- **Layout persistence**: the per-workspace snapshot stores the pane trees plus a descriptor for every non-PTY content — editor file path, web preview URL, kanban, API. On the next launch PTY panes come back through the session daemon and the rest is re-created from the snapshot: editors and previews under their old id (a file that no longer exists leaves its pane blank with a toast), Kanban / API are re-spawned backend-side and remapped. Switching workspaces re-hydrates from the same snapshot, so editors and previews survive a round-trip with their unsaved edits.
+- **Switching tabs keeps your place**: a content that is not on the visible tab is hidden and parked out of the layout, which drops every scroll offset inside it — so a file tab used to come back at line 1 after a round trip to another tab. Editors now remember where you were reading as you scroll and return there when the tab comes back: a code editor by document position (so it lands right even if you resized the pane while the tab was away), a markdown editor by its scroll offset, the API explorer its request editor and response pane. Unsaved edits, selection and undo history were never affected; only the scroll was.
+- **Layout persistence**: the per-workspace snapshot stores the pane trees plus a descriptor for every non-PTY content — editor file path, web preview URL, API. On the next launch PTY panes come back through the session daemon and the rest is re-created from the snapshot: editors and previews under their old id (a file that no longer exists leaves its pane blank with a toast), API is re-spawned backend-side and remapped. Switching workspaces re-hydrates from the same snapshot, so editors and previews survive a round-trip with their unsaved edits.
 
 ### Desktop terminal
 
 - **Rendering**: xterm.js with WebGL; Unicode 11 widths, so emoji and other wide glyphs occupy two cells and box-drawing around them (Claude's status lines) stays aligned. The bundled JetBrains Mono Nerd Font is loaded before the first terminal opens so cells are measured on the right face.
 - **Links**: URLs in the output are underlined on hover; `Ctrl+click` (`Cmd+click` on macOS) opens them in the default browser (http/https only — anything else a program prints is refused), never in the webview. Right-clicking a link adds *Open Link* / *Copy Link* to the menu.
 - **Bell and title**: a `BEL` flashes the tab chip of the terminal that rang; a window title set by the program (`user@host: ~/dir`, `vim file.rs`) becomes the tab label and the pane header, unless the tab was renamed.
-- **Clipboard**: copy-on-select writes the clipboard **once per selection gesture**, on mouse-up, however many rows the drag covered; it is silent, only an explicit *Copy* toasts. The clipboard goes through the Tauri clipboard plugin; the `wl-copy` / `xclip` / `pbcopy` path is kept only as the fallback when the plugin errors. Middle-click pastes: WebKitGTK delivers the X11/GTK *primary* selection as a native paste event, which the terminal consumes; when no such event arrives within the click (Wayland without the primary-selection protocol, macOS, Windows) it pastes the clipboard instead — unless a program is tracking the mouse (tmux, Claude's TUI), in which case the click is the program's. `Shift+Insert` works natively too.
+- **Clipboard**: copy-on-select writes the clipboard **once per selection gesture**, on mouse-up, however many rows the drag covered; it is silent, only an explicit *Copy* toasts. The clipboard goes through the Tauri clipboard plugin; the `wl-copy` / `xclip` / `pbcopy` path is kept only as the fallback when the plugin errors. Middle-click pastes: WebKitGTK delivers the X11/GTK *primary* selection as a native paste event, which the terminal consumes; when no such event arrives within the click (Wayland without the primary-selection protocol, macOS, Windows) it pastes the clipboard instead — unless a program is tracking the mouse (tmux, Claude's TUI), in which case the click is the program's. `Shift+Insert` works natively too. When the program reports the mouse (mirror's TUI does), plain drags go to it instead of selecting — hold `Shift` while dragging to select past it (on macOS: *Select All* from the right-click menu, then Copy); an explicit Copy with no selection says so in a toast instead of silently doing nothing.
 - **Context menu** (right-click): Copy (disabled without a selection), Paste, Select All (copies too when copy-on-select is on), Clear, Search…, Send Next Key to Terminal.
 - **Search bar** (`Ctrl+Shift+B`, menu, palette): anchored to the top-right of the terminal (it never scrolls with the viewport), a `n/m` result counter (`No results` in red, `m+` past the highlight limit), *Aa* match-case and *.\** regex toggles, `Enter` / `Shift+Enter` next / previous, `Esc` closes and focuses the terminal. The last query and toggles are remembered per tab.
 - **Send next key** (`Ctrl+Shift+E`): the next keystroke bypasses the app's shortcut dispatcher and xterm's own copy/paste interception and is turned into bytes as any terminal would (`Alt+B` → `ESC b`). Modifier presses on the way to a chord keep it armed; `Esc`, the chord again, or the terminal losing focus cancel it. The armed pane shows `next key → terminal` in its header.
@@ -635,6 +638,15 @@ The common git loop runs from the panel, the Git menu or the palette without a s
 - **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press.
 - **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
 - **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.
+
+### Desktop file viewer
+
+The read-only overlay (`Alt+Enter` in the file finder, `Enter` on a *Search in Project* hit, and any file whose extension says it is not editable text) is a CodeMirror buffer, so it reads like the editor tab rather than a text dump:
+
+- **Find in file**: `Ctrl+F` — or the *Find* button in the header — opens CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches and `Esc` closes the bar (a second `Esc` closes the viewer). Focus starts in the buffer, so vim's `/`, the arrows and `PgUp`/`PgDn` work too.
+- **A search hit opens where it matched**: coming from *Search in Project* (`Ctrl+Shift+F`), the viewer lands with the cursor on the matched line, centred, and its find bar already filled with the term you searched for — the other hits in that file are one `Enter` away. (The TUI's `t` does the same by opening `$EDITOR` at the line.)
+- **It remembers where you were reading**: scroll position and cursor are kept per file for the rest of the session, so reopening a file — after a click outside closed the overlay, or after opening something else in between — comes back to where you left off instead of to line 1. The positions live in memory only; they are reading state, not a preference, and are gone on the next launch.
+- `Ctrl+I` quick-edits in place (`Ctrl+S` saves, `Esc` asks before discarding), `Ctrl+E` opens `$EDITOR` in a terminal tab, and *Open in Editor* promotes the file to a real editor tab.
 
 ### Desktop sessions status
 
@@ -661,20 +673,19 @@ The desktop's view of the persistent-session daemon — the `sessions N / off / 
 
 ### Creating workspaces
 
-Press `Ctrl+G s` (or `n` in the workspace list) to open the New Workspace dialog. Provide:
+Press `Ctrl+G s` (or `a` on a project row in the sidebar tree, which also makes the result a member of that project) to open the Add Repository dialog. Provide:
 
-- **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin workspace via the "Create Worktree" action.
+- **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin repository via the "New Branch" action.
 - **Folder / URL:** When Source = Local folder, this is the path to the directory (`~` expands to `$HOME`). When Source = GitHub URL, paste the clone URL (HTTPS, SSH, or `git@github.com:owner/repo.git`).
 - **Clone into:** *(GitHub source only)* Parent directory the repo is cloned into; the clone lands at `<clone-into>/<repo>`. Pre-filled with `<data_dir>/repos` as a hint — that default folder is auto-created on first use, but any other path you type must already exist (`~` expands to `$HOME`). In the desktop app a folder picker is available.
 - **Desc:** (Optional) A brief description of the task. The workspace name is always derived automatically — folder basename for Local, repo name for GitHub.
 - **Prompt:** (Optional) An initial prompt stored with the workspace.
-- **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.
 
 Press `Enter` to create or `Esc` to cancel. Use `Tab` to cycle between fields.
 
 ### Editing workspaces
 
-Press `e` on a selected workspace to modify its **Kanban Path** or **Prompt**. This is useful for re-directing a workspace to a specific task board or updating the orchestration instructions.
+Press `e` on a selected workspace to modify its **Prompt** (the orchestration instructions stored with the checkout).
 
 ### Persistence
 
@@ -697,11 +708,17 @@ Workspace configurations are saved automatically and restored on startup using a
 
 ## Projects
 
-A **project** is a user-defined cross-cutting group with a colour — a label, not a place. One project can hold worktrees of different repos, clones and plain directories, and a workspace can belong to several projects. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa.
+A **project** is the one top-level unit both frontends navigate: a named, coloured group holding checkouts (each repo's clone and worktrees as flat rows) and plain directories. It is a *view*, not a place — worktrees still live under `<data_dir>/worktrees/<repo>/`, so the same repository can belong to several projects at once. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa; the tree both render is built by `piki_core::projects::tree::project_tree` from the project list plus the live workspace list, so the row model exists exactly once.
 
+A repository you have not put in any project is **not** wrapped in one: its checkouts render at the top level, after the projects, one row each. So the sidebar reads as "my projects, then my loose repositories", and a project only ever exists because you made it. Schema v12/v13 briefly seeded one project per repository; v14 removes exactly that shape again (a project whose members are all the checkouts of one repo and whose name is that repo's folder), leaving anything you built by hand alone.
+
+- **A project holds exactly what you put in it.** Membership is never inferred from a shared `source_repo`: two worktrees of one repository can sit in different projects, or one in a project and the other nowhere, because which *branch* belongs to a piece of work is your call. The one convenience is that creating a branch (or adding a repository) from inside a project makes the result a member of it.
 - **Members are just paths.** Whether a member renders as a workspace or as a directory is resolved against the registered workspace list at render time: a path with a workspace shows its name (and branch) and jumps on open; any other path shows dimmed as a directory and is **adopted as a `Simple` workspace on first open** (idempotent — once adopted, its rows upgrade by themselves everywhere).
 - **The colour is an index, never a value**: `color: 0..10` into a fixed 10-swatch palette. The desktop paints `var(--project-swatch-N)` (static tokens in `variables.css`, deliberately not theme-derived so the colour matches across frontends); the TUI reads `theme.project` (same RGB defaults, overridable per theme file like any other colour).
-- **Desktop**: the Projects view in the activity bar — project rows (dot, name, member count) expand into member rows carrying a colour stripe; `＋` and the row context menu open the create/edit dialog (name, 10-swatch radio, workspace checkboxes, add-directory path picker); deleting asks for confirmation and never touches the members themselves.
+- **Desktop**: the Projects tree is the sidebar (there is no separate workspace list) — project headers expand into one flat row per member; loose rows follow at the top level with no header. The header's two buttons create a project and add a repository; the row context menus carry the rest (new branch / worktree, add repository, edit / delete project, membership toggles). Deleting a project asks for confirmation and never touches what it grouped.
+- **Changing membership without the dialog**: right-click a checkout row for `Add to project "X"` / `Remove from project "X"` — one entry per project — or a repository / directory member row for Open / `Remove from "X"` / Edit Project….
+- **The edit dialog** is name, a 10-swatch colour radio and two member lists: the project's members in order, each with a ✕, and below them every workspace that is not a member yet, narrowed by a filter box that matches name, branch **and path** (`Enter` adds the first match). Each row prints its directory under the name — `~`-abbreviated but otherwise **complete**, wrapping to a second line rather than being cut — because two checkouts of one repo differ by nothing else, and the segment any ellipsis eats first is the one that tells them apart (a deep worktree path such as `~/.local/share/piki-multi/worktrees/agent-multi/nightly` used to show up elided even when the dialog had room to spare). Typing an absolute path (or `~/…`) offers it as a directory member, and *Browse for a directory…* picks one from disk.
+- **Where a row lives** is always one hover away: the sidebar tooltip prints the name (and branch) on the first line and the **full, unwrapped-to-the-end directory** below it — project headers list their member paths the same way.
 - **TUI**: two surfaces, same keys. The sidebar's **PROJECTS tab** (press `Tab` in the top-left pane, or click the tab label, to flip Workspaces ⇄ Projects — the choice persists across restarts) shows the groups inline: `j`/`k` move, `Enter` expands a project or opens/adopts a member, `n`/`e`/`d` create/edit/delete. The `C-g C-p` overlay is the same list as a popup. Both open the same editor: it cycles Name → Colour → Members with `Tab`, picks the colour with `←`/`→` and toggles members with `Space`. Directories are added from the desktop dialog or by adopting; the TUI editor lists them so they can be unchecked.
 
 ## Persistent sessions
@@ -729,11 +746,11 @@ Shell tabs (zsh, bash, fish) auto-source a tiny init script that emits OSC 133 (
 
 Claude Code agent tabs get a precise lifecycle channel instead of guessing from PTY silence. Piki ships six Claude Code hook scripts (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`) and passes them via a generated `claude --settings` file (your `~/.claude/settings.json` is never touched); each hook emits an **in-band OSC 777** sequence (`ESC]777;notify;piki://cli-agent;<json>BEL`) that the same per-tab OSC parser sniffs out of the PTY stream — purely additive, the agent stays a raw passthrough. Surfaces a per-tab status glyph (running / waiting-permission / idle / done) in the desktop status bar + an aggregate dot on the workspace tab, routes permission/idle/done through the shared notification + workspace-attention rail, and replaces the byte-silence idle heuristic (which auto-steps-aside once the channel proves live, and stays as graceful fallback otherwise). Scripts are materialized to `<data_dir>/claude-hooks/`; require `jq`. The channel is self-disabling (hooks no-op unless `PIKI_CLI_AGENT` is set) and version-negotiated (`v` field; unknown majors are dropped and the tab falls back to the heuristic). Event types (`CliAgentEvent`/`CliAgentState`/`CliAgentStatus`), JSON parsing, and hook-script installation (`install.rs`, this app's `--settings`/plugin generation) live entirely in `crates/core/src/cli_agent/` — [`piki-multiplex`](https://github.com/juanknebel/piki-multiplex) itself is domain-neutral (no notion of Claude, Codex, or any agent vocabulary) and only exposes a generic `SidecarState` trait + `SidecarConfig` (OSC target + factory) that piki-core's `CliAgentState` implements; the FIFO transport (`piki_multiplex::sidecar::sock`) and the OSC 777 arm (`piki_multiplex::shell_integration::parser`) move opaque JSON without interpreting it. Providers without a bridge (Gemini, etc.) keep the `IdleWatcher` unchanged.
 
-**Attention flow (desktop).** Every `pty-agent-event` carries an `attention` flag — true for permission / idle-notification / stop until the user looks at the tab. Looking is what clears it, exactly like the TUI event loop: `set_active_tab` and `switch_workspace` acknowledge the now-visible tab's marker and emit `pty-agent-ack`, and news that lands on the tab already on screen is acknowledged on the spot (its event arrives with `attention: false`). `list_agent_rows` (status, attention, summary, `elapsed_secs`) is the single source for every agent signal — the Agents panel, the workspace-list rollup, the `● N need you` status-bar segment, the amber badge on the Workspaces activity icon (so a hidden sidebar never hides the signal) and `Alt+A`, which orders candidates by the shared `status_severity` (permission > unseen news) and cycles when already standing on one. Elapsed time comes from `CliAgentState::run_started_at` (set on session start / prompt submit, cleared on stop), survives a daemon re-attach via the session snapshot, and ticks client-side between refreshes; the TUI Agents pane shows the same `3m 12s` suffix.
+**Attention flow (desktop).** Every `pty-agent-event` carries an `attention` flag — true for permission / idle-notification / stop until the user looks at the tab. Looking is what clears it, exactly like the TUI event loop: `set_active_tab` and `switch_workspace` acknowledge the now-visible tab's marker and emit `pty-agent-ack`, and news that lands on the tab already on screen is acknowledged on the spot (its event arrives with `attention: false`). `list_agent_rows` (status, attention, summary, `elapsed_secs`) is the single source for every agent signal — the Agents panel, the project tree's per-row rollup, the `● N need you` status-bar segment, the amber badge on the Projects activity icon (so a hidden sidebar never hides the signal) and `Alt+A`, which orders candidates by the shared `status_severity` (permission > unseen news) and cycles when already standing on one. Elapsed time comes from `CliAgentState::run_started_at` (set on session start / prompt submit, cleared on stop), survives a daemon re-attach via the session snapshot, and ticks client-side between refreshes; the TUI Agents pane shows the same `3m 12s` suffix.
 
 ### Structured Antigravity integration
 
-Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` is deliberately not registered: agy fires it before every tool step whether or not you'll be asked to approve it, so Antigravity tabs have no `waiting-permission` state; everything else is at parity. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`.
+Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / waiting-permission / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PreToolUse` → `permission_request` (predicted) or `tool_started`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` needs a prediction step because agy fires it before every tool step whether or not you'll be asked to approve it (and exposes no permission hook event): a `run_command` the `permissions.allow` list doesn't cover, outside `trustedWorkspaces`, under a default `toolPermission` mode becomes `permission_request` (amber `waiting-permission`, like Claude); everything else becomes `tool_started` (plain running). Anything unknown fails safe to `tool_started`, and a mispredicted amber is corrected by the follow-up `tool_complete`. The hook always prints `{}` and never overrides agy's own policy. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`.
 
 ### Passive status detection (Codex, Muse)
 
@@ -747,9 +764,9 @@ The generic fallback for every provider without structured or passive status: `c
 
 Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured.
 
-### Agent dispatch
+**Where the files live** (`piki_core::agent_scan`, shared by both frontends): the *profiles* are keyed by `source_repo` — they belong to the repo and its whole worktree family — but the *files* are read from and written to **the checkout you are standing in**, not the parent repo. A worktree is its own working tree, so an agent file created there (or simply not committed yet) does not exist in the parent's, and scanning the parent would not list it.
 
-Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), nesting it under its parent's worktree family in the sidebar; inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee.
+**Which directories** are scanned and synced into: the provider's `agent_dir` from `providers.toml` when it has one, otherwise the conventional directory for its command — `claude` → `.claude/agents`, `gemini` and `agy` → `.gemini/agents` (Antigravity reads Gemini's tree), `codex` → `.codex/agents`, `muse` → `.muse/agents`, `opencode` → `.opencode/agents`, `kilo` → `.kilo/agents`. The command is matched on its basename, like the hook bridges and the passive state manifests. A provider with neither a configured directory nor a known command is skipped — set `agent_dir` in the Providers dialog to give it one.
 
 ## Notifications
 
@@ -787,6 +804,9 @@ crates/
         restore.rs       # Restore buffer from a vt100 parser (screen + scrollback + modes)
         daemon/          # The headless daemon: owns PTYs, fans out to N clients, retains exited sessions
         client.rs        # Daemon handle + Attachment stream + ensure_daemon (autostart)
+      projects/
+        mod.rs           # Project, ProjectMember, MemberKind — the top-level unit both frontends navigate
+        tree.rs          # project_tree() — the ONE sidebar row model (project header + flat rows) + hidden_checkouts()
       workspace/
         manager.rs       # Git worktree CRUD
         config.rs        # Workspace config persistence
@@ -808,7 +828,7 @@ crates/
       commands/          # Tauri IPC commands, one module per domain:
                          #   workspace, pty (spawn/write/resize/close/detach/move), git (stage/commit/amend/push/pull/
                          #   discard/branches/checkout/merge/resolve), diff, gitlog, stash, agents (profiles + dispatch),
-                         #   review (gh), theme, logs, search (file index + project search), markdown, fs, kanban, api,
+                         #   review (gh), theme, logs, search (file index + project search), markdown, fs, api,
                          #   providers, system (sysinfo, open_url), clipboard (fallback path), chat (+ chat_approve), lsp,
                          #   session (list/kill/remove/adopt/status/restore_summary/quit_summary), settings (shared app settings)
     frontend/            # Vanilla TypeScript + xterm.js + CodeMirror 6 (Vite build)
@@ -826,7 +846,7 @@ crates/
         layout-budget.ts # Sidebar/chat width budget (editor ≥ 320px); layout-snapshot.ts (saved layouts with contents)
         mount-policy.ts  # Hidden-terminal output buffer + first-mount resync policy; pty-frame.ts (binary PTY frames)
         agent-attention.ts # Attention ordering + Alt+A target; mru.ts, labels.ts, file-kind.ts, in-flight.ts, chat-context.ts
-        components/      # UI components (activity-bar, sidebar, tab-bar, pane-view, terminal-panel, open-content, git-actions, …);
+        components/      # UI components (activity-bar, sidebar, project-tree, tab-bar, pane-view, terminal-panel, open-content, git-actions, …);
                          # icons.ts = the SVG icon set; dialogs/ = one file per dialog + the Settings sections
         fonts/           # JetBrainsMonoNerdFontMono-{Regular,Bold,Italic}.woff2 + piki-icons.woff2 (PUA subset) + fonts.css
         styles/          # index.css (import order = cascade); variables.css (tokens); reset.css; primitives.css; motion.css;
@@ -863,7 +883,7 @@ crates/
         input.rs         # Crossterm key events -> PTY bytes
       input/
         mod.rs           # Main input dispatcher (mode routing)
-        interaction.rs   # Focused-pane key handlers (API, markdown, filelist, terminal, workspace, kanban)
+        interaction.rs   # Focused-pane key handlers (API, markdown, filelist, terminal, workspace)
         dialog.rs        # Dialog input handlers (workspace, tabs, agents, providers, logs)
         mouse.rs         # Mouse events (click, scroll, drag-to-select, resize, PTY forwarding)
         editor_input.rs  # Inline editor keyboard handling
@@ -877,7 +897,7 @@ crates/
       ui/
         layout.rs        # Full TUI layout (all panels, overlays)
         panels.rs        # Panel frame rendering
-        sidebar.rs       # Workspace list sidebar + Agents pane
+        sidebar.rs       # Project tree sidebar + Agents pane
         statusbar.rs     # Footer bar and status line rendering
         terminal.rs      # Live PTY rendering (tui-term)
         fuzzy.rs         # Fuzzy search overlay (nucleo matching + ignore walker)
@@ -984,7 +1004,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads; writes are queued to a per-session writer thread so the UI thread never blocks on a child that stopped reading stdin
 - **Terminal always comes back** — normal exit and the panic hook restore the terminal; a signal-safe handler (`term_guard.rs`) does the same on SIGTERM/SIGHUP so `kill <pid>` after a hang doesn't leave the shell in raw mode with mouse reporting on. A watchdog thread logs `event loop stalled` if the main loop stops ticking for 10 s
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
-- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer, Git/lazygit) are created on demand via `Ctrl+G c` which opens a categorized menu (Shell, AI Agents, Tools); PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY; the Git tab runs lazygit in its own PTY
+- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Code Review, API Explorer, Git/lazygit) are created on demand via `Ctrl+G c` which opens a categorized menu (Shell, AI Agents, Tools); PTY-backed tabs each have their own session, while Code Review and API Explorer tabs manage their own state without PTY; the Git tab runs lazygit in its own PTY
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple and Project workspaces point directly to their source directory rather than a managed worktree (git status still runs there, harmlessly empty for non-git directories)
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` in `event_loop.rs` for truly async event loop; key handlers return `Option<Action>`, `action.rs` executes actions asynchronously
 - **Structured logging** to file via `tracing` (not to terminal) — TUI output is unaffected; logs rotate daily in `~/.local/share/piki-multi/logs/`
@@ -1019,13 +1039,14 @@ GUI launches (`.desktop` / `.app`) inherit a stripped environment, so `shell_env
 
 Three crates cooperate:
 
-- **`piki-api-client`** — transport. `ChatClient` trait unifies two local-LLM backends: `OllamaClient` (`GET /api/tags`, streaming `POST /api/chat`) and `LlamaCppClient` (OpenAI-compatible `GET /v1/models`, SSE `POST /v1/chat/completions`). Streaming is delivered token-by-token over `mpsc` channels as `ChatStreamEvent` (`Token` / `Done` / `ToolCalls` / `Error`). The same crate holds the Hurl-like parser and `HttpClient` used by the API Explorer.
+- **`piki-api-client`** — transport. `ChatClient` trait unifies two local-LLM backends: `OllamaClient` (`GET /api/tags`, streaming `POST /api/chat`) and `LlamaCppClient` (OpenAI-compatible `GET /v1/models`, SSE `POST /v1/chat/completions`). Streaming is delivered token-by-token over `mpsc` channels as `ChatStreamEvent` (`Token` / `Done` / `ToolCalls` / `Usage` / `Error`). The same crate holds the Hurl-like parser and `HttpClient` used by the API Explorer.
+- **Token usage** — the OpenAI-compatible backends request `stream_options.include_usage` and forward the server's trailing usage chunk as `ChatStreamEvent::Usage` (`ChatUsage { prompt_tokens, completion_tokens }`, informational — never terminal). The agent loop re-emits each report as `AgentEvent::Usage`; both frontends accumulate per-conversation totals (`ChatPanelState.usage` in the TUI, `DesktopApp.chat_usage`, reset on clear) and render them in the chat footer/header (`tokens 12.4k in · 4.1k out`). Ollama never reports usage, so the counter stays hidden there. Token counts only — no cost: per-model pricing isn't tracked.
 - **`piki-core::chat`** — domain types shared by both frontends (`ChatMessage`, `ChatRole` incl. `Tool`, `ChatConfig`, `ChatServerType`, tool-use types).
 - **`piki-agent`** — the agentic loop. `AgentLoop` sends messages with tool definitions, executes requested tools, feeds results back, and repeats until the LLM answers with text only (max 20 iterations). Built-in read-only tools: `git_status`, `read_file` (path-sandboxed), `list_files`, `search_code`. Progress reaches the UI as `AgentEvent`s. A 60s no-token watchdog in both frontends unlocks the panel if a stream dies.
 
 ### Desktop internals
 
-The desktop backend wraps `piki-core` behind Tauri IPC commands (`crates/desktop/src/commands/`, one module per domain); the frontend is vanilla TypeScript (`crates/desktop/frontend/src/`). Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). The implementation rules — one opener, one close path, one settings store, the shortcut registry, the token layer — are in `crates/desktop/CLAUDE.md`.
+The desktop backend wraps `piki-core` behind Tauri IPC commands (`crates/desktop/src/commands/`, one module per domain); the frontend is vanilla TypeScript (`crates/desktop/frontend/src/`). Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). The implementation rules — one opener, one close path, one settings store, the shortcut registry, the token layer — are in `crates/desktop/AGENTS.md`.
 
 **PTY event path**: each reader (local or daemon attachment) pushes its chunks to a per-tab coalescer (`pty_output.rs`) whose emitter thread batches adaptively — the first chunk after a quiet gap ships within 2 ms (keystroke echo), sustained output at most one message per 33 ms (~30 fps) or 64 KB — over a raw Tauri IPC channel (binary frame `len(tab_id) · tab_id · bytes`, decoded by `frontend/src/pty-frame.ts`) that the frontend registers once at startup; the base64 `pty-output` event is only the fallback while no channel is registered. `pty-exit` goes out from the same emitter, after the last batch. Structured payloads (`pty-shell-event`, `pty-agent-event`, `pty-attention`) stay on Tauri events. Frontend side: a terminal whose pane is hidden queues its output (2 MB cap, then fed to xterm anyway) and replays it on the next mount; PTY resizes are coalesced to one IPC per frame per terminal and skipped when the grid is unchanged; a pane click renders nothing — the pane tree is reconciled against the DOM by pane id only when it changes. Invariants and numbers: [performance.md](performance.md#desktop-tauri).
 

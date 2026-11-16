@@ -245,6 +245,27 @@ pub(crate) fn rename_session(app: &App, session_id: &str, title: Option<String>)
     });
 }
 
+/// Re-point a moved tab's daemon session at its new workspace, so the next
+/// launch restores it in the workspace it now lives in. Fire-and-forget; the
+/// tab has moved either way (same best-effort rule as the desktop's
+/// `move_tab`).
+pub(crate) fn repoint_session(app: &App, session_id: &str, workspace_path: std::path::PathBuf) {
+    let Some(daemon) = app.session_daemon.clone() else {
+        return;
+    };
+    let req = SetMetaRequest {
+        id: session_id.to_string(),
+        workspace_path: Some(workspace_path),
+        ..Default::default()
+    };
+    let id = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = daemon.set_meta(req) {
+            tracing::warn!(session = %id, error = %e, "failed to re-point session workspace");
+        }
+    });
+}
+
 /// Tools a provider's hook bridge needs but that aren't on PATH, with the
 /// agent's display name. `None` when the provider has no bridge (nothing to
 /// degrade) or when everything it needs is installed.
@@ -325,8 +346,8 @@ pub(crate) async fn spawn_tab(
         None
     };
     let idx = ws.add_tab(provider.clone(), true, provider_cfg);
-    // Kanban / CodeReview / Api render from app state, not a PTY.
-    if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
+    // CodeReview / Api render from app state, not a PTY.
+    if *provider == AIProvider::CodeReview {
         return (idx, None);
     }
     if *provider == AIProvider::Api {
@@ -424,10 +445,9 @@ pub(crate) async fn spawn_tab(
             Some(format!("Could not start '{cmd}': {e}"))
         }
     };
-    // A tool (shell/agent/git) just activated for this workspace — that's
-    // the trigger for inferring its branch (never persisted, see
-    // `ws.branch`), so kick the background refresh loop immediately instead
-    // of waiting for its next periodic tick.
+    // A tool (shell/agent/git) just activated for this workspace — kick the
+    // background refresh loop immediately instead of waiting for its next
+    // periodic tick, so the sidebar counts pick up the new tab's workspace.
     ws.dirty = true;
     ws.last_refresh = None;
     (idx, spawn_error)
@@ -845,7 +865,7 @@ mod tests {
         );
     }
 
-    /// Kanban/CodeReview/Api tabs render from app state and never spawn a
+    /// CodeReview/Api tabs render from app state and never spawn a
     /// PTY — they must not be reported as failures.
     #[tokio::test]
     async fn spawn_tab_succeeds_for_ptyless_providers() {
@@ -853,7 +873,7 @@ mod tests {
         let ws_idx = add_test_workspace(&mut app);
         let paths = piki_core::paths::DataPaths::default_paths();
 
-        for provider in [AIProvider::Kanban, AIProvider::CodeReview, AIProvider::Api] {
+        for provider in [AIProvider::CodeReview, AIProvider::Api] {
             let (_idx, err) = spawn_tab(
                 &mut app.workspaces[ws_idx],
                 &provider,

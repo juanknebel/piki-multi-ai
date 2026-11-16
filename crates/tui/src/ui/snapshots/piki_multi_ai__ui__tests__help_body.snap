@@ -1,22 +1,23 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 835
+assertion_line: 862
 expression: body
 ---
 
   Prefix actions
     Press C-g first (tmux-style).
-    Workspace
-      C-g s         New Workspace
-      C-g r         Create Worktree (GitHub-only)
-      C-g e         Edit Workspace
-      C-g d         Delete Workspace
+    Repository
+      C-g s         Add Repository
+      C-g r         New Branch / Worktree (GitHub-only)
+    Checkout
+      C-g e         Edit Checkout
+      C-g d         Delete Checkout
       C-g b         Dashboard
-      C-g i         Workspace Info
-      C-g w         Switch Workspace (fuzzy)
-      C-g }         Next Workspace
-      C-g {         Previous Workspace
-      C-g `         Toggle Last Workspace
+      C-g i         Checkout Info
+      C-g w         Switch Checkout (fuzzy)
+      C-g }         Next Checkout
+      C-g {         Previous Checkout
+      C-g `         Toggle Last Checkout
     Git
       C-g g         Git (lazygit)
     Tabs
@@ -25,6 +26,8 @@ expression: body
       C-g n         Next Tab
       C-g p         Previous Tab
       C-g R         Rename Tab
+      C-g C-r       Restart Tab
+      C-g C-w       Move Tab to Checkout
     Search
       C-g /         Fuzzy File Search
       C-g t         Search in Project (content)
@@ -35,9 +38,10 @@ expression: body
       C-g a         About
       C-g o         Logs
       C-g C-s       Sessions (persistent)
-      C-g C-p       Projects
       C-g [         Terminal Scroll Mode
+      C-g C-k       Clear Terminal
       C-g y         AI Chat
+      C-g C-y       Add Terminal Selection to Chat
       C-g C-t       Scratch Terminal (home)
     Focus
       C-g h         Focus Pane Left
@@ -54,6 +58,7 @@ expression: body
       C-S-c         Copy Terminal
     Agents
       C-g m         Manage Agents
+      C-g C-a       Jump to Agent Needing Attention
     Providers
       C-g v         Manage Providers
     App
@@ -80,19 +85,25 @@ expression: body
     Mouse scroll  Scroll the terminal
     Mouse drag    Select text (copies on release)
 
-  Workspace list pane
-    j             Select the next workspace
-    k             Select the previous workspace
-    h             Collapse a worktree family
-    l             Expand a worktree family
-    Enter         Switch to it / toggle collapse
-    Tab           Toggle the Workspaces ⇄ Projects tab
+  Projects pane (the sidebar tree)
+    j             Select the next row
+    k             Select the previous row
+    h             Collapse a project
+    l             Expand a project
+    Enter         Open the checkout / collapse a project / adopt a repo or directory
+    n             New project
+    e             Edit the project this row belongs to
+    d             Delete the project this row belongs to
+    a             Add a repository to this project
+    w             New branch + worktree in this repository (opens it first if needed)
+    m             Put this row into a project, or take it out
 
   Agents pane
     j             Select the next agent
     k             Select the previous agent
     Enter         Jump to that workspace and tab
     Click         Jump to that workspace and tab
+    b             Broadcast one input line to several agents
 
   Fuzzy file search (C-g /)
     Type          Filter files
@@ -103,6 +114,7 @@ expression: body
     C-v           Open in the inline editor
     C-o           Open a markdown file in a new tab
     M-m           Open a markdown file in mdr (external)
+    C-y           Send the file to the AI chat as context
     Esc           Close
 
   Project content search (C-g t)
@@ -121,7 +133,7 @@ expression: body
     Enter         Run the selected command
     Esc           Close
 
-  Workspace switcher (C-g w)
+  Checkout switcher (C-g w)
     Type          Filter workspaces and tabs
     ↑/↓           Select a row
     C-p           Select the previous row
@@ -144,19 +156,12 @@ expression: body
     r             Reload the list from the daemon
     Esc           Close
 
-  Projects overlay (C-g C-p)
-    j             Select the next row
-    k             Select the previous row
-    Enter         Expand/collapse a project; jump to a member (adopts a directory)
-    n             New project
-    e             Edit the selected project
-    d             Delete the selected project
-    Esc           Close
-    Tab           Cycle fields (in the editor)
-    ←/→           Pick the colour (in the editor)
-    Space         Toggle a member (in the editor)
-    Enter         Save (in the editor)
-    Esc           Back to the list (in the editor)
+  Project editor
+    Tab           Cycle fields
+    ←/→           Pick the colour
+    Space         Toggle a member
+    Enter         Save
+    Esc           Cancel
 
   Logs (C-g o)
     j             Select the next entry
@@ -180,32 +185,15 @@ expression: body
     C-l           Clear the conversation (press twice)
     Esc           Hide (keeps state)
 
-  Kanban board
-    h/l/j/k       Navigate columns and cards
-    H/L           Move the card left/right
-    n / a         New card
-    e             Edit the selected card
-    d             Delete the card
-    D             Dispatch an agent (branch + AI)
-    Enter         Toggle card details
-    r             Refresh the board
-    s             Toggle sort by priority
-    /             Search cards
-    p             Filter by project
-    Esc           Close
-
-  Dispatch agent dialog
-    ←/→/Tab       Step 1: cycle the agent / provider
-    Type          Step 1: add extra prompt instructions
-    Enter         Step 1: continue to the destination
-    ←/→/Tab       Step 2: new worktree or current workspace
-    Enter         Step 2: dispatch
+  Broadcast to agents dialog
+    j/k/↑/↓       Step 0: move through agents
+    Space         Step 0: check one agent
+    a             Step 0: check all / none
+    Enter         Step 0: continue to the input
+    Type          Step 1: the line to send
+    Tab           Step 1: toggle append Enter
+    Enter         Step 1: send
     Esc           Back a step, or cancel
-
-  Move dispatched card (after confirming delete)
-    j/k           Select the target kanban column
-    Enter         Move the card and delete the workspace
-    Esc           Cancel
 
   Manage agents (C-g m)
     j/k           Navigate the agent list

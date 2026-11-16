@@ -8,7 +8,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::ollama::{ChatStreamEvent, RawToolCall};
+use crate::ollama::{ChatStreamEvent, ChatUsage, RawToolCall};
 
 /// A chat message in OpenAI-compatible format (used by OpenRouter).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +179,9 @@ impl OpenRouterClient {
             tools: tools.map(|t| t.to_vec()),
             tool_choice: tools.map(|_| "auto".to_string()),
             plugins,
+            // Ask for the trailing usage chunk so the UI can show per-chat
+            // token counts. Servers that don't understand it ignore it.
+            stream_options: Some(serde_json::json!({"include_usage": true})),
         };
 
         let mut req = self.client.post(&url).json(&payload);
@@ -265,6 +268,14 @@ impl OpenRouterClient {
 
                 match serde_json::from_str::<ChatCompletionChunk>(data) {
                     Ok(parsed) => {
+                        // Forward server-reported token counts immediately;
+                        // they are informational, not terminal.
+                        if let Some(ref usage) = parsed.usage {
+                            let _ = tx.send(ChatStreamEvent::Usage(ChatUsage {
+                                prompt_tokens: usage.prompt_tokens,
+                                completion_tokens: usage.completion_tokens,
+                            }));
+                        }
                         for choice in &parsed.choices {
                             // Accumulate streamed tool call fragments
                             if let Some(ref tcs) = choice.delta.tool_calls {
@@ -362,12 +373,26 @@ struct ChatCompletionRequest {
     tool_choice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     plugins: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<serde_json::Value>,
+}
+
+/// Token counts the server appends to the stream when `stream_options.
+/// include_usage` was requested (usually the last chunk before `[DONE]`).
+#[derive(Deserialize, Default)]
+struct ChunkUsage {
+    #[serde(default)]
+    prompt_tokens: u64,
+    #[serde(default)]
+    completion_tokens: u64,
 }
 
 #[derive(Deserialize)]
 struct ChatCompletionChunk {
     #[serde(default)]
     choices: Vec<ChunkChoice>,
+    #[serde(default)]
+    usage: Option<ChunkUsage>,
 }
 
 #[derive(Deserialize)]
@@ -437,6 +462,16 @@ mod tests {
         let json = r#"{"id":"chatcmpl-1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#;
         let parsed: ChatCompletionChunk = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.choices[0].finish_reason.as_deref(), Some("stop"));
+    }
+
+    #[test]
+    fn test_parse_sse_usage_chunk() {
+        let json = r#"{"id":"gen-1","choices":[],"usage":{"prompt_tokens":123,"completion_tokens":45,"total_tokens":168}}"#;
+        let parsed: ChatCompletionChunk = serde_json::from_str(json).unwrap();
+        assert!(parsed.choices.is_empty());
+        let usage = parsed.usage.expect("usage parsed");
+        assert_eq!(usage.prompt_tokens, 123);
+        assert_eq!(usage.completion_tokens, 45);
     }
 
     #[test]

@@ -32,4 +32,26 @@ ignore = [
     # Re-check when reqwest bumps hickory to >=0.26.
     "RUSTSEC-2026-0118",
     "RUSTSEC-2026-0119",
+    # hickory-proto/resolver 0.25.2 via reqwest 0.12 hickory-dns: the OpenRouter
+    # client uses it purely as a stub resolver (openrouter.rs, IPv4 fallback).
+    # 0487/0489/0490 panic on DNS *text* input (FromStr/zone lexer) — never
+    # parsed here (wire format only); 0491 amplifies from wire header counts,
+    # exposed at most to the configured upstream like any stub resolver, with
+    # no DNSSEC validation enabled. 0504/0505/0511/0512/0514/0530/0531/0532
+    # are DNSSEC-validation logic flaws (same non-reachability as 0118/0119).
+    # Blocked: reqwest 0.12 pins hickory-resolver ^0.25 (verified: forcing
+    # 0.26.2 fails resolution), and 7 have no fixed hickory release at all.
+    # Re-check when reqwest moves to hickory >=0.26; drop the fixed IDs then.
+    "RUSTSEC-2026-0487",
+    "RUSTSEC-2026-0489",
+    "RUSTSEC-2026-0490",
+    "RUSTSEC-2026-0491",
+    "RUSTSEC-2026-0504",
+    "RUSTSEC-2026-0505",
+    "RUSTSEC-2026-0511",
+    "RUSTSEC-2026-0512",
+    "RUSTSEC-2026-0514",
+    "RUSTSEC-2026-0530",
+    "RUSTSEC-2026-0531",
+    "RUSTSEC-2026-0532",
 ]

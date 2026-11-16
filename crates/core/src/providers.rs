@@ -70,6 +70,19 @@ struct ProvidersFile {
     providers: Vec<ProviderConfig>,
 }
 
+/// Parse-only validation of a `providers.toml` body: returns the provider
+/// count, or a human-readable reason. Read-only — unlike `load_or_init` it
+/// never seeds defaults or touches the filesystem, so `doctor` can use it.
+pub fn validate_file_contents(contents: &str) -> Result<usize, String> {
+    let trimmed = contents.trim();
+    if trimmed.is_empty() {
+        return Err("file is empty (defaults will be seeded on first launch)".to_string());
+    }
+    toml::from_str::<ProvidersFile>(trimmed)
+        .map(|f| f.providers.len())
+        .map_err(|e| format!("invalid TOML: {e}"))
+}
+
 /// Manages user-configurable providers loaded from `providers.toml`.
 #[derive(Debug, Clone)]
 pub struct ProviderManager {
@@ -201,6 +214,27 @@ impl ProviderManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_file_contents_counts_providers() {
+        let body = r#"
+[[providers]]
+name = "A"
+command = "a"
+
+[[providers]]
+name = "B"
+command = "b"
+"#;
+        assert_eq!(validate_file_contents(body), Ok(2));
+    }
+
+    #[test]
+    fn validate_file_contents_rejects_garbage_and_empties() {
+        assert!(validate_file_contents("not = [valid").is_err());
+        assert!(validate_file_contents("").is_err());
+        assert!(validate_file_contents("   \n ").is_err());
+    }
 
     #[test]
     fn test_default_providers() {

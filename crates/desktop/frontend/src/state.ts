@@ -2,6 +2,7 @@ import type {
   AIProvider,
   WorkspaceInfo,
   WorkspaceDetail,
+  WorkspaceListEntry,
   ChangedFile,
   TabInfo,
   WorkspaceStatus,
@@ -43,16 +44,14 @@ import {
 } from "./layout-snapshot";
 
 export type SidebarView =
-  | "workspaces"
   | "projects"
   | "files"
   | "git"
   | "agents"
-  | "kanban"
   | "api"
   | "web-preview";
-// Note: "workspaces"/"projects"/"files"/"git" are real sidebar views;
-// "agents" opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
+// Note: "projects"/"files"/"git" are real sidebar views;
+// "agents" opens the modal dialog, "api"/"web-preview" open tabs
 
 export interface UndoEntry {
   action: "stage" | "unstage";
@@ -77,7 +76,10 @@ export type StateEvent =
   | "active-pane-changed"
   | "tab-shell-state-changed"
   | "workspace-attention-changed"
-  | "agent-rows-changed";
+  | "workspace-branch-changed"
+  | "agent-rows-changed"
+  | "projects-changed"
+  | "workspace-added";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
  *  (leaf) holds at most one content item from `WorkspaceState.tabs`. */
@@ -136,7 +138,7 @@ export interface TabShellState {
  *  `components/open-content.ts`; the store itself stays component-free).
  *  `describe` turns a live content into its snapshot descriptor (null = not
  *  restorable); `restoreFrontend` re-registers an editor / web preview
- *  synchronously under the SAME id; `respawn` re-creates a Kanban / API tab
+ *  synchronously under the SAME id; `respawn` re-creates an API tab
  *  backend-side and resolves to its NEW id; `verify` says whether a restored
  *  frontend content is still valid (the file still exists) — false blanks
  *  the pane instead of opening an editor on nothing. */
@@ -165,7 +167,7 @@ class AppState extends EventTarget {
   private _workspaces: WorkspaceState[] = [];
   private _activeWorkspace = 0;
   private _sysinfo = "";
-  private _activeView: SidebarView = "workspaces";
+  private _activeView: SidebarView = "projects";
   private _selectedFiles = new Set<string>();
   private _undoStack: UndoEntry[] = [];
   private _savedLayouts: Record<string, SavedWsLayout> = {};
@@ -239,14 +241,24 @@ class AppState extends EventTarget {
     };
   }
 
-  setWorkspaces(infos: WorkspaceInfo[]) {
-    this._workspaces = infos.map((info) => this._blankWs(info));
+  setWorkspaces(entries: WorkspaceListEntry[]) {
+    this._workspaces = entries.map((entry) => {
+      const ws = this._blankWs(entry.info);
+      // Warm from `list_workspaces`: every repo row paints its branch on
+      // the first frame, without waiting for the git watcher's first poll.
+      ws.branch = entry.branch;
+      return ws;
+    });
     this.emit("workspaces-changed");
   }
 
   addWorkspace(info: WorkspaceInfo) {
     this._workspaces.push(this._blankWs(info));
     this.emit("workspaces-changed");
+    // Distinct from "workspaces-changed" (also fired by the bulk restore at
+    // startup) — listeners that only care about a freshly created/imported
+    // workspace (e.g. the piki-skills offer prompt) want this one.
+    this.emit("workspace-added");
   }
 
   removeWorkspace(index: number) {
@@ -309,11 +321,20 @@ class AppState extends EventTarget {
     if (!ws) return;
     ws.changedFiles = files;
     ws.aheadBehind = aheadBehind;
+    // A branch change is announced for EVERY workspace, not just the active
+    // one: the sidebar and the Projects view label rows of workspaces the
+    // user isn't standing on, and the git watcher polls them all. It fires
+    // only when the branch really changed, so it stays rare — unlike
+    // `files-changed`, which rides every changed-file poll.
+    const branchChanged = branch !== undefined && ws.branch !== branch;
     if (branch !== undefined) {
       ws.branch = branch;
     }
     if (workspaceIdx === this._activeWorkspace) {
       this.emit("files-changed");
+    }
+    if (branchChanged) {
+      this.emit("workspace-branch-changed");
     }
   }
 
@@ -360,7 +381,7 @@ class AppState extends EventTarget {
     this._scheduleSave();
   }
 
-  /** Singletons (Kanban/API/Web Preview) also open as their own top-level
+  /** Singletons (API/Web Preview) also open as their own top-level
    *  tab; dedup is handled by `focusSingletonTab`. Kept as a named alias so
    *  call sites read intentionally. */
   addTabToRoot(workspaceIdx: number, tab: TabInfo) {
@@ -402,7 +423,7 @@ class AppState extends EventTarget {
   }
 
   isSingletonProvider(provider: AIProvider): boolean {
-    return provider === "Kanban" || provider === "Api" || provider === "WebPreview";
+    return provider === "Api" || provider === "WebPreview";
   }
 
   /** If a singleton tab for `provider` is already open in the active
@@ -765,7 +786,7 @@ class AppState extends EventTarget {
   private _agentRowsFetchedAt = 0;
 
   /** Live agent tabs across ALL workspaces, from `list_agent_rows` — the
-   *  one source every agent signal reads (Agents panel, workspace-list
+   *  one source every agent signal reads (Agents panel, project-tree
    *  rollup, status-bar segment, activity-bar badge, `Alt+A`). Refreshed
    *  by `startAgentRowsSync()` in agents-panel.ts. */
   get agentRows(): AgentRow[] {
@@ -922,9 +943,9 @@ class AppState extends EventTarget {
 
   /** Build `ws.wsTabs` from the saved layout, or fall back to one tab per
    *  content. Orphan contents (not in any saved tab) are appended as tabs.
-   *  `ws.tabs` arrives as the BACKEND list (PTYs, and in-session Kanban /
-   *  API); the non-PTY contents the snapshot describes are added back here:
-   *  editors / previews synchronously under their old id, Kanban / API via
+   *  `ws.tabs` arrives as the BACKEND list (PTYs, and in-session API);
+   *  the non-PTY contents the snapshot describes are added back here:
+   *  editors / previews synchronously under their old id, API via
    *  an async re-spawn that then remaps the id in the trees. */
   private _hydrateLayout(ws: WorkspaceState, preferredActiveContent: number) {
     const knownIds = new Set(ws.tabs.map((t) => t.id));
@@ -1085,6 +1106,14 @@ class AppState extends EventTarget {
 
   private emit(event: StateEvent) {
     this.dispatchEvent(new Event(event));
+  }
+
+  /** Announce that the project list changed. The projects live in storage, not
+   *  in this store (the sidebar tree is derived in core from them plus the
+   *  workspace list), so `projects-panel.ts` raises this after a save/delete
+   *  and the tree re-fetches. The only event an outside module may emit. */
+  notifyProjectsChanged() {
+    this.emit("projects-changed");
   }
 }
 

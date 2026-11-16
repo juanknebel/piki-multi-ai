@@ -6,6 +6,19 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::app::App;
 
+/// Running token counts for the conversation, or an empty span when the
+/// backend never reported usage (Ollama, llama.cpp without the option).
+fn usage_span(app: &App, h: Color) -> Span<'_> {
+    if app.chat_panel.usage.total() == 0 {
+        Span::raw("")
+    } else {
+        Span::styled(
+            format!("tokens {}", app.chat_panel.usage.summary()),
+            Style::default().fg(h),
+        )
+    }
+}
+
 pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let theme = &app.theme;
 
@@ -174,6 +187,8 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) 
             spans.push(Span::raw("  "));
             spans.push(Span::styled("[ctrl-c]", Style::default().fg(h)));
             spans.push(Span::raw(" stop"));
+            spans.push(Span::raw("  "));
+            spans.push(usage_span(app, h));
             spans
         }
         crate::app::ChatSubMode::Chat => {
@@ -187,7 +202,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) 
             } else {
                 " [C-w] web "
             };
-            vec![
+            let mut hints = vec![
                 Span::styled("[Enter]", Style::default().fg(h)),
                 Span::raw(" send  "),
                 Span::styled("[Tab]", Style::default().fg(h)),
@@ -204,7 +219,10 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) 
                 Span::raw(" paste  "),
                 Span::styled("[Esc]", Style::default().fg(h)),
                 Span::raw(" hide"),
-            ]
+            ];
+            hints.push(Span::raw("  "));
+            hints.push(usage_span(app, h));
+            hints
         }
     };
     frame.render_widget(Paragraph::new(Line::from(hints)), footer_area);

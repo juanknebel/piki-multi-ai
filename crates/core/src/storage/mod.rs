@@ -72,6 +72,32 @@ pub trait UiPrefsStorage: Send + Sync {
     fn set_preference(&self, key: &str, value: &str) -> anyhow::Result<()>;
 }
 
+/// Per-repo adoption state for piki's agent-skills injection — whether a
+/// given [`crate::repo_skills::Skill`] was offered/accepted/declined for a
+/// `source_repo`, and at which skill version. `status` is one of
+/// `"accepted"` / `"declined"` (there is no stored "offered" state — an
+/// absent row simply means "never asked").
+pub trait RepoSkillStorage: Send + Sync {
+    /// `(skill_version, status)` of the last decision recorded for this
+    /// repo + skill, if any.
+    fn get_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+    ) -> anyhow::Result<Option<(u32, String)>>;
+    /// Record the user's decision on `skill_id` at `skill_version`.
+    fn set_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+        skill_version: u32,
+        status: &str,
+    ) -> anyhow::Result<()>;
+    /// ids of every skill currently `"accepted"` for this repo — the set
+    /// `repo_skills::sync_accepted_skills` writes into `AGENTS.md`.
+    fn list_accepted_skills(&self, source_repo: &Path) -> anyhow::Result<Vec<String>>;
+}
+
 pub trait ProjectStorage: Send + Sync {
     /// All projects ordered by display order, members in position order.
     /// Errors are swallowed (empty vec), like `load_all_workspaces`.
@@ -88,6 +114,7 @@ pub struct AppStorage {
     pub ui_prefs: Option<Box<dyn UiPrefsStorage>>,
     pub agent_profiles: Option<Box<dyn AgentProfileStorage>>,
     pub projects: Option<Box<dyn ProjectStorage>>,
+    pub repo_skills: Option<Box<dyn RepoSkillStorage>>,
 }
 
 pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStorage> {
@@ -99,6 +126,7 @@ pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStor
         api_history: Some(Box::new(std::sync::Arc::clone(&store))),
         ui_prefs: Some(Box::new(std::sync::Arc::clone(&store))),
         agent_profiles: Some(Box::new(std::sync::Arc::clone(&store))),
-        projects: Some(Box::new(store)),
+        projects: Some(Box::new(std::sync::Arc::clone(&store))),
+        repo_skills: Some(Box::new(store)),
     })
 }

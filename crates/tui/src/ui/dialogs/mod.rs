@@ -1,5 +1,6 @@
 mod agents;
 mod dashboard;
+mod move_tab;
 pub(crate) mod projects;
 mod providers;
 mod rename;
@@ -9,10 +10,11 @@ mod workspace;
 
 // Re-export all dialog render functions
 pub(crate) use self::agents::{
-    render_dispatch_agent_dialog, render_dispatch_card_move_dialog, render_edit_agent_dialog,
-    render_edit_agent_role_dialog, render_import_agents_dialog, render_manage_agents_dialog,
+    render_broadcast_dialog, render_edit_agent_dialog, render_edit_agent_role_dialog,
+    render_import_agents_dialog, render_manage_agents_dialog,
 };
 pub(crate) use self::dashboard::render_dashboard_overlay;
+pub(crate) use self::move_tab::render_move_tab_dialog;
 pub(crate) use self::projects::render_projects_overlay;
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
 pub(crate) use self::rename::render_rename_tab_dialog;
@@ -26,7 +28,8 @@ pub(crate) use self::system::{
 };
 pub(crate) use self::workspace::{
     render_confirm_delete_dialog, render_create_worktree_dialog, render_edit_workspace_dialog,
-    render_new_workspace_dialog, render_pr_picker_dialog, render_workspace_info_overlay,
+    render_new_workspace_dialog, render_pr_picker_dialog, render_skill_offers_dialog,
+    render_workspace_info_overlay,
 };
 
 use ratatui::Frame;

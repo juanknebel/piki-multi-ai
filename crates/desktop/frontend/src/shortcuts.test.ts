@@ -6,6 +6,7 @@ import {
   isTerminalSafeCombo,
   keyMatches,
   parseCombo,
+  tabIndexFromCode,
 } from "./shortcuts";
 
 describe("zoom shortcuts", () => {
@@ -34,6 +35,22 @@ describe("zoom shortcuts", () => {
     expect(keyMatches("p", "KeyP", "P")).toBe(true);
     expect(keyMatches("+", "Equal", "-")).toBe(false);
     expect(keyMatches("x", "KeyX", "=")).toBe(false);
+  });
+});
+
+describe("tabIndexFromCode", () => {
+  it("reads the tab number off the physical key, whatever Shift produced", () => {
+    // Ctrl+Shift+1 on a US layout arrives as e.key "!" — only the code is usable.
+    expect(tabIndexFromCode("Digit1")).toBe(0);
+    expect(tabIndexFromCode("Digit9")).toBe(8);
+    expect(tabIndexFromCode("Numpad3")).toBe(2);
+  });
+
+  it("ignores everything that is not a 1–9 digit key", () => {
+    expect(tabIndexFromCode("Digit0")).toBeNull();
+    expect(tabIndexFromCode("KeyA")).toBeNull();
+    expect(tabIndexFromCode("Minus")).toBeNull();
+    expect(tabIndexFromCode("")).toBeNull();
   });
 });
 
@@ -112,7 +129,7 @@ describe("shortcut registry", () => {
     const all = helpSections().flatMap((s) => s.items);
     const byLabel = Object.fromEntries(all.map((i) => [i.label, i.outsideOnly]));
     expect(byLabel["Command Palette"]).toBe(false); // Ctrl+Shift+P captures from a shell
-    expect(byLabel["New Workspace"]).toBe(false); // Alt+N captures too
+    expect(byLabel["Add Repository"]).toBe(false); // Alt+N captures too
     expect(byLabel["Settings"]).toBe(true); // Ctrl+, stays outside-only by convention
     expect(byLabel["Zoom In"]).toBe(true); // bare Ctrl+=; its Ctrl+Shift twin captures
     expect(byLabel["Dashboard"]).toBe(false);

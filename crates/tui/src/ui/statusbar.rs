@@ -117,7 +117,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         if !mode_label.is_empty() {
             spans.push(sep.clone());
         }
-        spans.push(Span::styled("No active workspace", text_style));
+        spans.push(Span::styled("Nothing open", text_style));
         let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
         frame.render_widget(bar, area);
         return;
@@ -369,11 +369,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
         AppMode::ConfirmCloseTab => vec![("y".to_string(), "close"), ("n".to_string(), "cancel")],
-        AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
-        AppMode::DispatchCardMove => vec![
-            ("↑/↓".to_string(), "select"),
-            ("Enter".to_string(), "confirm"),
+        AppMode::MoveTab => vec![
+            ("j/k".to_string(), "select"),
+            ("Enter".to_string(), "move tab"),
             ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
+        AppMode::SkillOffers => vec![
+            ("y".to_string(), "add"),
+            ("n".to_string(), "not now"),
+            ("Esc".to_string(), "ask later"),
         ],
         // ── Modal overlays: the footer shows the modal's keys, never stale
         // terminal hints underneath it ──
@@ -381,11 +386,6 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("y".to_string(), "delete"),
             ("n".to_string(), "keep"),
             ("Esc".to_string(), "cancel"),
-        ],
-        AppMode::DispatchAgent => vec![
-            ("j/k".to_string(), "select"),
-            ("Enter".to_string(), "dispatch"),
-            ("Esc".to_string(), "back"),
         ],
         AppMode::ManageAgents => vec![
             ("j/k".to_string(), "select"),
@@ -533,26 +533,45 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
         ],
         _ => {
-            if app.active_pane == ActivePane::WorkspaceList
-                && app.sidebar_view == crate::app::SidebarView::Projects
-            {
-                // The pane's Projects tab: overlay keys, in place.
-                vec![
-                    (cfg.get_binding("projects", "select"), "expand/open"),
-                    (cfg.get_binding("projects", "new"), "new"),
-                    (cfg.get_binding("projects", "edit"), "edit"),
-                    (cfg.get_binding("projects", "delete"), "delete"),
-                    (cfg.get_binding("workspaces", "view"), "workspaces"),
-                ]
-            } else if app.active_pane == ActivePane::WorkspaceList {
-                // Display-only pane: everything goes through the prefix.
-                vec![
-                    (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
-                    (cfg.get_binding("app", "new_workspace"), "new ws"),
-                    (cfg.get_binding("app", "edit_workspace"), "edit ws"),
-                    (cfg.get_binding("app", "delete_workspace"), "delete ws"),
-                    (cfg.get_binding("workspaces", "view"), "projects"),
-                ]
+            if app.active_pane == ActivePane::WorkspaceList {
+                // The project tree. Each row kind offers different actions, so
+                // the hints follow the cursor (the footer cache key carries
+                // `sidebar_row_kind` for exactly this).
+                use crate::app::SidebarRowKind as K;
+                match app.sidebar_row_kind() {
+                    K::None => vec![
+                        (cfg.get_binding("projects", "new"), "new project"),
+                        (cfg.get_binding("app", "new_workspace"), "new ws"),
+                    ],
+                    K::Project => vec![
+                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "add_repo"), "add repo"),
+                        (cfg.get_binding("projects", "new"), "new"),
+                        (cfg.get_binding("projects", "edit"), "edit"),
+                        (cfg.get_binding("projects", "delete"), "delete"),
+                    ],
+                    // A synthetic bucket has no stored project to edit.
+                    K::Bucket => vec![
+                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "new"), "new project"),
+                    ],
+                    // An unopened repo: Enter adopts it (a first "new branch"
+                    // adopts it too, then branches on the second press).
+                    K::Repo => vec![
+                        (cfg.get_binding("projects", "select"), "adopt"),
+                        (cfg.get_binding("projects", "new_worktree"), "new branch"),
+                    ],
+                    K::Checkout => vec![
+                        (cfg.get_binding("projects", "select"), "open"),
+                        (cfg.get_binding("app", "new_tab"), "new tab"),
+                        (cfg.get_binding("app", "edit_workspace"), "edit ws"),
+                        (cfg.get_binding("app", "delete_workspace"), "delete ws"),
+                    ],
+                    K::Dir => vec![
+                        (cfg.get_binding("projects", "select"), "adopt"),
+                        (cfg.get_binding("projects", "edit"), "edit project"),
+                    ],
+                }
             } else if app.active_pane == ActivePane::Agents {
                 vec![
                     (
@@ -570,31 +589,21 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
-                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
-            {
-                // The kanban board speaks flow_tui's own pane-local keys, not
-                // app chords — surface them (dispatch especially, the one
-                // reason to be here) so the footer stops showing terminal hints.
-                vec![
-                    ("h/l/j/k".to_string(), "navigate"),
-                    ("n".to_string(), "new"),
-                    ("D".to_string(), "dispatch"),
-                    ("e".to_string(), "edit"),
-                    ("d".to_string(), "delete"),
-                    ("Enter".to_string(), "details"),
-                    (cfg.prefix_display(), "prefix"),
-                ]
-            } else if app
-                .current_workspace()
-                .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.api_state.is_some())
             {
-                let has_search = app
+                let api = app
                     .current_workspace()
                     .and_then(|ws| ws.current_tab())
-                    .and_then(|tab| tab.api_state.as_ref())
-                    .is_some_and(|api| api.search.is_some());
-                if has_search {
+                    .and_then(|tab| tab.api_state.as_ref());
+                let has_search = api.is_some_and(|api| api.search.is_some());
+                let has_jq = api.is_some_and(|api| api.jq.is_some());
+                if has_jq {
+                    vec![
+                        ("enter".to_string(), "run filter"),
+                        (cfg.format_binding("ctrl-u"), "clear"),
+                        ("esc".to_string(), "drop filter"),
+                    ]
+                } else if has_search {
                     vec![
                         ("enter".to_string(), "next match"),
                         ("shift-enter".to_string(), "prev match"),
@@ -612,6 +621,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                             "scroll",
                         ),
                         (cfg.format_binding("ctrl-f"), "search"),
+                        (cfg.format_binding("ctrl-q"), "jq"),
                         (cfg.format_binding("ctrl-c"), "copy response"),
                         (cfg.prefix_display(), "prefix"),
                     ]

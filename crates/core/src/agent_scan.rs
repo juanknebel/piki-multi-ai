@@ -22,8 +22,53 @@
 
 use std::path::Path;
 
-use crate::providers::ProviderManager;
+use crate::providers::{ProviderConfig, ProviderManager};
 use crate::storage::AgentProfile;
+
+/// Conventional agent directory per agent CLI, keyed by the provider's
+/// command basename — the fallback for a provider whose `agent_dir` the user
+/// never filled in (the seeded Claude entry has one; a provider added through
+/// the dialog usually doesn't). Matched the same way
+/// [`crate::cli_agent::bridge_for_command`] and
+/// `agent_state_detect::manifest_for_command` match theirs, so "piki knows
+/// this agent" means the same thing everywhere.
+///
+/// `agy` (Antigravity) reads Gemini's tree — its plugin bridge is installed
+/// under `~/.gemini/` — so it shares `.gemini/agents`.
+const DEFAULT_AGENT_DIRS: &[(&str, &str)] = &[
+    ("claude", ".claude/agents"),
+    ("gemini", ".gemini/agents"),
+    ("agy", ".gemini/agents"),
+    ("codex", ".codex/agents"),
+    ("muse", ".muse/agents"),
+    ("opencode", ".opencode/agents"),
+    ("kilo", ".kilo/agents"),
+];
+
+/// The conventional agent directory for a command (`/usr/local/bin/codex`
+/// matches `codex`), or `None` for a CLI piki knows nothing about.
+pub fn default_agent_dir(command: &str) -> Option<&'static str> {
+    let base = Path::new(command)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_ascii_lowercase())?;
+    DEFAULT_AGENT_DIRS
+        .iter()
+        .find(|(cmd, _)| *cmd == base)
+        .map(|(_, dir)| *dir)
+}
+
+/// Where this provider's agent files live, relative to a checkout: what the
+/// user configured, else the convention for its command. `None` when neither
+/// is known — nothing to scan, and nothing to sync into.
+pub fn agent_dir_for(config: &ProviderConfig) -> Option<String> {
+    config
+        .agent_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(String::from)
+        .or_else(|| default_agent_dir(&config.command).map(String::from))
+}
 
 /// An agent definition file found in the repo.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,23 +83,26 @@ pub struct ScannedAgent {
     pub exists: bool,
 }
 
-/// Scan `source_repo` for agent definition files.
+/// Scan a checkout for agent definition files.
 ///
-/// One directory per provider that configures an `agent_dir`; results are
-/// sorted by (provider, name) so the import list doesn't reshuffle between
-/// runs on the whims of readdir order.
+/// `root` is the workspace the user is standing in, NOT its `source_repo`: a
+/// worktree is its own checkout, and an agent file written (or not yet
+/// committed) there does not exist in the parent repo's working tree. One
+/// directory per provider ([`agent_dir_for`]); results are sorted by
+/// (provider, name) so the import list doesn't reshuffle between runs on the
+/// whims of readdir order.
 pub fn scan_repo_agents(
-    source_repo: &Path,
+    root: &Path,
     providers: &ProviderManager,
     existing: &[AgentProfile],
 ) -> Vec<ScannedAgent> {
     let mut found = Vec::new();
 
     for config in providers.all() {
-        let Some(ref agent_dir) = config.agent_dir else {
+        let Some(agent_dir) = agent_dir_for(config) else {
             continue;
         };
-        let dir = source_repo.join(agent_dir);
+        let dir = root.join(agent_dir);
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue; // missing directory is the normal case, not an error
         };
@@ -92,10 +140,15 @@ mod tests {
     use crate::providers::{PromptFormat, ProviderConfig};
 
     fn provider(name: &str, agent_dir: Option<&str>) -> ProviderConfig {
+        provider_cmd(name, &name.to_lowercase(), agent_dir)
+    }
+
+    /// Same, with the command spelled out — the fallback keys off it.
+    fn provider_cmd(name: &str, command: &str, agent_dir: Option<&str>) -> ProviderConfig {
         ProviderConfig {
             name: name.to_string(),
             description: String::new(),
-            command: name.to_lowercase(),
+            command: command.to_string(),
             default_args: Vec::new(),
             prompt_format: PromptFormat::Positional,
             dispatchable: true,
@@ -168,12 +221,78 @@ mod tests {
         assert_eq!(found[0].name, "real");
     }
 
+    /// A provider the user added through the dialog usually has no
+    /// `agent_dir` — Codex, Muse and Antigravity all ship that way — and used
+    /// to be skipped outright, so their agents were invisible to the import.
     #[test]
-    fn providers_without_an_agent_dir_are_skipped() {
+    fn a_provider_without_an_agent_dir_falls_back_to_its_convention() {
         let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), ".claude/agents/reviewer.md", "x");
-        let mgr = manager(vec![provider("Claude", None)]);
+        write(tmp.path(), ".codex/agents/reviewer.md", "x");
+        write(tmp.path(), ".muse/agents/planner.md", "y");
+        write(tmp.path(), ".gemini/agents/scout.md", "z");
+
+        let mgr = manager(vec![
+            provider_cmd("Codex", "codex", None),
+            provider_cmd("Muse", "muse", None),
+            // Antigravity reads Gemini's tree.
+            provider_cmd("Antigravity", "agy", None),
+        ]);
+        let found = scan_repo_agents(tmp.path(), &mgr, &[]);
+
+        let by_provider: Vec<(&str, &str)> = found
+            .iter()
+            .map(|a| (a.provider.as_str(), a.name.as_str()))
+            .collect();
+        assert_eq!(
+            by_provider,
+            vec![
+                ("Antigravity", "scout"),
+                ("Codex", "reviewer"),
+                ("Muse", "planner"),
+            ]
+        );
+    }
+
+    /// The configured directory always wins over the convention.
+    #[test]
+    fn a_configured_agent_dir_beats_the_fallback() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), ".codex/agents/conventional.md", "x");
+        write(tmp.path(), "agents/mine.md", "y");
+
+        let mgr = manager(vec![provider_cmd("Codex", "codex", Some("agents"))]);
+        let found = scan_repo_agents(tmp.path(), &mgr, &[]);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].name, "mine");
+    }
+
+    #[test]
+    fn an_unknown_command_with_no_agent_dir_is_skipped() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), ".whatever/agents/x.md", "x");
+        let mgr = manager(vec![provider_cmd("Mystery", "mystery-cli", None)]);
         assert!(scan_repo_agents(tmp.path(), &mgr, &[]).is_empty());
+    }
+
+    #[test]
+    fn default_dirs_match_on_the_command_basename() {
+        assert_eq!(default_agent_dir("claude"), Some(".claude/agents"));
+        assert_eq!(
+            default_agent_dir("/usr/local/bin/codex"),
+            Some(".codex/agents")
+        );
+        assert_eq!(default_agent_dir("CODEX"), Some(".codex/agents"));
+        assert_eq!(default_agent_dir("agy"), Some(".gemini/agents"));
+        assert_eq!(default_agent_dir("mystery-cli"), None);
+        assert_eq!(default_agent_dir(""), None);
+    }
+
+    /// An empty string in the file is "not configured", not a dir named "".
+    #[test]
+    fn a_blank_agent_dir_is_treated_as_unset() {
+        let cfg = provider_cmd("Codex", "codex", Some("   "));
+        assert_eq!(agent_dir_for(&cfg).as_deref(), Some(".codex/agents"));
     }
 
     /// The desktop compared names only, so an agent named the same under a

@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 95
 expression: content
 ---
- No active workspace
+ Nothing open

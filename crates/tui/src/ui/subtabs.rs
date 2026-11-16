@@ -23,6 +23,14 @@ fn block_width(tab: &Tab, i: usize, theme: &Theme) -> u16 {
     {
         w += 2;
     }
+    // " ○" exited marker (2) — mirrors render
+    if tab
+        .pty_session
+        .as_ref()
+        .is_some_and(|pty| !pty.peek_alive())
+    {
+        w += 2;
+    }
     // " ×" close button (2)
     if tab.closable {
         w += 2;
@@ -196,6 +204,16 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
             // Agents pane); the glyph keeps its semantic color even on the
             // active accent block.
             spans.push(Span::styled(format!(" {}", glyph), base_style.fg(color)));
+        }
+        // A tab whose process exited keeps its slot (it can be restarted in
+        // place with `restart_tab`), so it has to look different from a live
+        // one — same `○` the Agents pane and the dashboard use.
+        if tab
+            .pty_session
+            .as_ref()
+            .is_some_and(|pty| !pty.peek_alive())
+        {
+            spans.push(Span::styled(" ○", base_style.fg(theme.status.exited)));
         }
         if tab.closable {
             spans.push(Span::styled(" ×", base_style.add_modifier(Modifier::DIM)));

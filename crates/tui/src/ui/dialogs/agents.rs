@@ -7,183 +7,117 @@ use ratatui::widgets::Paragraph;
 use crate::app::App;
 use crate::dialog_state::DialogState;
 
-pub(crate) fn render_dispatch_card_move_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let Some(DialogState::DispatchCardMove {
-        ref columns,
-        selected,
-        ..
-    }) = app.active_dialog
-    else {
-        return;
-    };
-
-    let theme = &app.theme.dialog;
-    // Height: 1 blank + 1 title line + 1 blank + columns + 1 blank + 2 border = columns.len() + 5
-    let height = (columns.len() as u16) + 5;
-    let popup = super::clear_popup(frame, area, 50, height);
-
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Move card to which column?",
-            Style::default()
-                .fg(theme.delete_text)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-    ];
-
-    for (i, (_id, title)) in columns.iter().enumerate() {
-        let marker = if i == selected { "▸ " } else { "  " };
-        let style = if i == selected {
-            Style::default()
-                .fg(theme.delete_name)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(theme.delete_text)
-        };
-        lines.push(Line::from(Span::styled(
-            format!("  {marker}{title}"),
-            style,
-        )));
-    }
-
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Card Destination", theme.delete_border));
-    frame.render_widget(text, popup);
-}
-
-pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let Some(DialogState::DispatchAgent {
-        ref card_title,
-        ref card_description,
-        agent_idx,
-        ref agents,
-        ref additional_prompt,
-        additional_prompt_cursor,
+pub(crate) fn render_broadcast_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::Broadcast {
+        ref rows,
+        ref selected,
+        cursor,
+        ref input,
+        input_cursor,
         step,
-        use_current_ws,
-        ..
+        append_enter,
     }) = app.active_dialog
     else {
         return;
     };
 
+    let total = rows.len();
     let popup_width = (area.width * 60 / 100).max(50);
-    let popup_height = 14;
+    let popup_height = if step == 0 {
+        ((total as u16) + 8)
+            .min(area.height.saturating_sub(4))
+            .max(10)
+    } else {
+        12
+    };
     let popup = super::clear_popup(frame, area, popup_width, popup_height);
     let active_c = app.theme.dialog.new_ws_active;
     let inactive_c = app.theme.dialog.new_ws_inactive;
     let fmax = popup.width.saturating_sub(14) as usize;
 
-    // Truncate card title/desc for display
-    let title_display = if card_title.len() > fmax {
-        format!("{}…", &card_title[..fmax.saturating_sub(1)])
-    } else {
-        card_title.clone()
-    };
-    let desc_display = if card_description.len() > fmax {
-        format!("{}…", &card_description[..fmax.saturating_sub(1)])
-    } else {
-        card_description.clone()
-    };
+    let mut lines = vec![Line::from("")];
 
-    // Selector shows agents followed by raw dispatchable providers.
-    // Indices [0..agents.len()) = agents, [agents.len()..) = providers.
-    let providers = app.dispatchable_provider_list();
-    let mut selector_items: Vec<String> = agents
-        .iter()
-        .enumerate()
-        .map(|(i, (name, _, _))| {
-            if i == agent_idx {
-                format!("[{}]", name)
+    if step == 0 {
+        // Step 0: agent multi-select checklist
+        for (i, (ws_idx, tab_idx)) in rows.iter().enumerate() {
+            let label = app
+                .workspaces
+                .get(*ws_idx)
+                .and_then(|ws| ws.tabs.get(*tab_idx))
+                .map(|tab| {
+                    let ws_name = app
+                        .workspaces
+                        .get(*ws_idx)
+                        .map(|ws| ws.name.as_str())
+                        .unwrap_or("?");
+                    format!("{} › {}", ws_name, tab.display_label())
+                })
+                .unwrap_or_else(|| "(gone)".to_string());
+            let checkbox = if selected.get(i).copied().unwrap_or(false) {
+                "[x] "
             } else {
-                format!(" {} ", name)
-            }
-        })
-        .collect();
-    if !agents.is_empty() && !providers.is_empty() {
-        selector_items.push("│".to_string());
-    }
-    for (i, p) in providers.iter().enumerate() {
-        let combined_idx = agents.len() + i;
-        if combined_idx == agent_idx {
-            selector_items.push(format!("[{}]", p.label()));
-        } else {
-            selector_items.push(format!(" {} ", p.label()));
+                "[ ] "
+            };
+            let marker = if i == cursor { "▸ " } else { "  " };
+            let style = if i == cursor {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(app.theme.palette.fg0)
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}{}", marker, checkbox), style),
+                Span::styled(label, style),
+            ]));
         }
-    }
-    let selector_text = selector_items.join(" ");
-
-    let mut lines = vec![
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Card:     ", Style::default().fg(inactive_c)),
-            Span::styled(title_display, Style::default().fg(app.theme.palette.fg0)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Desc:     ", Style::default().fg(inactive_c)),
-            Span::styled(desc_display, Style::default().fg(app.theme.palette.fg2)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Agent:    ", Style::default().fg(active_c)),
-            Span::styled(selector_text, Style::default().fg(active_c)),
-        ]),
-        Line::from(Span::styled(
-            "              ◄/► to change",
-            Style::default().fg(app.theme.palette.fg3),
-        )),
-        Line::from(""),
-    ];
-
-    if step == 1 {
-        // Step 2: workspace destination selector
-        let ws_selector = if use_current_ws {
-            " New   [Current]"
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("  [Space] toggle  ", Style::default().fg(active_c)),
+            Span::styled("[a] all  ", Style::default().fg(active_c)),
+            Span::styled("[Enter] next  ", Style::default().fg(active_c)),
+            Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
+        ]));
+    } else {
+        // Step 1: the line to send
+        let count = selected.iter().filter(|s| **s).count();
+        let target_summary = if count == 0 {
+            "highlighted agent".to_string()
         } else {
-            "[New]   Current "
+            format!("{count} agent(s)")
         };
         lines.push(Line::from(vec![
-            Span::styled("  Workspace:", Style::default().fg(active_c)),
-            Span::styled(format!(" {}", ws_selector), Style::default().fg(active_c)),
+            Span::styled("  To:       ", Style::default().fg(inactive_c)),
+            Span::styled(target_summary, Style::default().fg(active_c)),
         ]));
-        lines.push(Line::from(Span::styled(
-            "              ◄/► to change",
-            Style::default().fg(app.theme.palette.fg3),
-        )));
         lines.push(Line::from(""));
+        lines.push(super::render_text_field(
+            "  Send:     ",
+            input,
+            true,
+            input_cursor,
+            fmax,
+            super::field_style(true, active_c, inactive_c),
+        ));
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "  [Tab] append Enter: {}",
+                if append_enter { "yes" } else { "no" }
+            ),
+            Style::default().fg(active_c),
+        )]));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(
-                "  [Enter] dispatch    ",
+                "  [Enter] send    ",
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD),
             ),
             Span::styled("[Esc] back", Style::default().fg(inactive_c)),
         ]));
-    } else {
-        // Step 0: agent selection + prompt
-        lines.push(super::render_text_field(
-            "  Prompt:   ",
-            additional_prompt,
-            true,
-            additional_prompt_cursor,
-            fmax,
-            super::field_style(true, active_c, inactive_c),
-        ));
-        lines.push(Line::from(""));
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "  [Enter] dispatch    ",
-                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
-        ]));
     }
 
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Dispatch Agent", app.theme.palette.iris));
+    let text = Paragraph::new(lines).block(super::popup_block(
+        "Broadcast to Agents",
+        app.theme.palette.iris,
+    ));
     frame.render_widget(text, popup);
 }
 

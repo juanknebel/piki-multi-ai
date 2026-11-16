@@ -131,7 +131,11 @@ pub async fn sync_agent_to_repo(
     workspace_idx: usize,
     agent_id: i64,
 ) -> Result<(), String> {
-    let (storage, source_repo) = {
+    // Profiles are keyed by `source_repo` (they belong to the repo, shared by
+    // its worktrees); the FILE goes into the checkout the user is standing in
+    // — a worktree is its own working tree, and writing into the parent's
+    // would put the agent somewhere the user isn't.
+    let (storage, source_repo, ws_path) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -139,6 +143,7 @@ pub async fn sync_agent_to_repo(
         (
             std::sync::Arc::clone(&app.storage),
             app.workspaces[workspace_idx].info.source_repo.clone(),
+            app.workspaces[workspace_idx].info.path.clone(),
         )
     };
 
@@ -157,11 +162,11 @@ pub async fn sync_agent_to_repo(
         let app = state.lock();
         app.provider_manager
             .get(&agent.provider)
-            .and_then(|c| c.agent_dir.clone())
+            .and_then(piki_core::agent_scan::agent_dir_for)
             .ok_or_else(|| format!("Provider '{}' has no agent_dir configured", agent.provider))?
     };
 
-    let agent_dir = source_repo.join(dir);
+    let agent_dir = ws_path.join(dir);
     std::fs::create_dir_all(&agent_dir).map_err(|e| format!("Failed to create directory: {e}"))?;
     std::fs::write(agent_dir.join(format!("{}.md", agent.name)), &agent.role)
         .map_err(|e| format!("Failed to write agent file: {e}"))?;
@@ -176,7 +181,9 @@ pub async fn scan_repo_agents(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
 ) -> Result<Vec<ScannedAgent>, String> {
-    let (storage, source_repo) = {
+    // Same split as the sync above: profiles by `source_repo`, files from the
+    // checkout the user is in.
+    let (storage, source_repo, ws_path) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -184,6 +191,7 @@ pub async fn scan_repo_agents(
         (
             std::sync::Arc::clone(&app.storage),
             app.workspaces[workspace_idx].info.source_repo.clone(),
+            app.workspaces[workspace_idx].info.path.clone(),
         )
     };
 
@@ -202,7 +210,7 @@ pub async fn scan_repo_agents(
     // skipped.
     let discovered: Vec<ScannedAgent> = {
         let app = state.lock();
-        piki_core::agent_scan::scan_repo_agents(&source_repo, &app.provider_manager, &existing)
+        piki_core::agent_scan::scan_repo_agents(&ws_path, &app.provider_manager, &existing)
             .into_iter()
             .map(|a| ScannedAgent {
                 name: a.name,
@@ -268,7 +276,6 @@ pub async fn import_agents(
     Ok(imported)
 }
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn dispatch_agent(
     state: State<'_, Mutex<DesktopApp>>,
@@ -278,10 +285,6 @@ pub async fn dispatch_agent(
     prompt: String,
     create_worktree: bool,
     ws_name: Option<String>,
-    dispatch_card_id: Option<String>,
-    dispatch_source_kanban: Option<String>,
-    dispatch_agent_name: Option<String>,
-    dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
     // All dispatchable providers live in ProviderManager (providers.toml).
     let (ai_provider, command, default_args, prompt_format, provider_cfg) = {
@@ -305,18 +308,17 @@ pub async fn dispatch_agent(
 
     // If creating a new worktree workspace
     let target_ws_idx = if create_worktree {
-        let (manager, source_dir, source_kanban_path) = {
+        let (manager, source_dir) = {
             let app = state.lock();
             if workspace_idx >= app.workspaces.len() {
                 return Err("Workspace index out of range".to_string());
             }
             let m = piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
             let dir = app.workspaces[workspace_idx].info.source_repo.clone();
-            let kanban = app.workspaces[workspace_idx].info.kanban_path.clone();
-            (m, dir, kanban)
+            (m, dir)
         };
 
-        let description = dispatch_card_title.as_deref().unwrap_or("Agent dispatch");
+        let description = "Agent dispatch";
 
         let name = ws_name.unwrap_or_else(|| {
             format!(
@@ -329,7 +331,7 @@ pub async fn dispatch_agent(
             )
         });
         let info = manager
-            .create(&name, description, &prompt, source_kanban_path, &source_dir)
+            .create(&name, description, &prompt, &source_dir)
             .await
             .map_err(|e| format!("Failed to create workspace: {e}"))?;
 
@@ -347,9 +349,6 @@ pub async fn dispatch_agent(
             + 1;
         let mut ws_info = info;
         ws_info.order = order;
-        ws_info.dispatch_card_id = dispatch_card_id;
-        ws_info.dispatch_source_kanban = dispatch_source_kanban;
-        ws_info.dispatch_agent_name = dispatch_agent_name;
 
         let ws_source_repo = ws_info.source_repo.clone();
         app.workspaces.push(crate::state::DesktopWorkspace {
@@ -410,7 +409,7 @@ pub async fn dispatch_agent(
     let tab_id = tab.id.clone();
 
     // Dispatched agents with a hook bridge (Claude Code, Antigravity) get the
-    // structured cli-agent channel so the kanban flow sees precise lifecycle
+    // structured cli-agent channel so the UI sees precise lifecycle
     // status. Other providers run bare (no shell wrapper, no hooks).
     let (extra_env, extra_args, integration_on, cli_agent_sock) = match bridge_for_command(&command)
     {

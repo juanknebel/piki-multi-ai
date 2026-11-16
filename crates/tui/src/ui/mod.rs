@@ -178,8 +178,6 @@ mod tests {
             name_cursor: 0,
             prompt: String::new(),
             prompt_cursor: 0,
-            kanban: String::new(),
-            kanban_cursor: 0,
             active_field: CreateWorktreeField::Name,
             existing,
             existing_selected: 24,
@@ -235,6 +233,30 @@ mod tests {
     }
 
     #[test]
+    fn test_render_move_tab_dialog() {
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        app.active_dialog = Some(crate::dialog_state::DialogState::MoveTab {
+            tab: 0,
+            targets: vec![1],
+            selected: 0,
+        });
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_move_tab_dialog(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("move_tab_dialog", content);
+    }
+
+    #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
         let app = App::new(
@@ -251,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_status_bar_normal_no_workspace() {
+    fn test_render_status_bar_normal_nothing_open() {
         let mut terminal = test_terminal(80, 1);
         let app = App::new(
             test_storage(),
@@ -263,7 +285,7 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("status_bar_normal_no_workspace", content);
+        insta::assert_snapshot!("status_bar_normal_nothing_open", content);
     }
 
     #[test]
@@ -346,13 +368,9 @@ mod tests {
             workspace_type: piki_core::WorkspaceType::Worktree,
             description: String::new(),
             prompt: String::new(),
-            kanban_path: None,
             order,
             source_repo: std::path::PathBuf::from(format!("/tmp/src-{name}")),
             source_repo_display: String::new(),
-            dispatch_card_id: None,
-            dispatch_source_kanban: None,
-            dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
@@ -439,7 +457,7 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_workspace_list_pr_review_group_header() {
+    fn test_snapshot_sidebar_pr_review_bucket() {
         // Ephemeral PR review workspaces are collected under one synthetic
         // "pr-review" GroupHeader row instead of the usual source_repo family
         // grouping (each review checkout has its own source_repo).
@@ -476,7 +494,7 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_pr_review_group_header", content);
+        insta::assert_snapshot!("sidebar_pr_review_bucket", content);
     }
 
     #[test]
@@ -544,10 +562,10 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_workspace_list_family_separators() {
-        // A blank line must separate a worktree family's last visible row
-        // from a flat neighbor (or the next family) — otherwise a flat repo
-        // like "ferrum-trade" reads as if it belonged to the block above it.
+    fn test_snapshot_sidebar_loose_repos() {
+        // With no projects configured every checkout is loose: each renders
+        // as its own row at the top level, with no pseudo-project header
+        // above it and no repo group around siblings.
         let mut terminal = test_terminal(40, 12);
         let mut app = App::new(
             test_storage(),
@@ -600,14 +618,14 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_family_separators", content);
+        insta::assert_snapshot!("sidebar_loose_repos", content);
     }
 
     #[test]
-    fn test_snapshot_workspace_list_collapsed_family_surfaces_child_attention() {
-        // Collapsing a family must not hide its children's attention — the
-        // parent row should surface the aggregated idle dot / changed-file
-        // count / ahead-behind instead of losing them behind the chevron.
+    fn test_snapshot_sidebar_collapsed_project_surfaces_child_attention() {
+        // Collapsing a project must not hide its checkouts' attention — the
+        // header surfaces the aggregated idle dot / changed-file count /
+        // ahead-behind instead of losing them behind the chevron.
         let mut terminal = test_terminal(40, 6);
         let mut app = App::new(
             test_storage(),
@@ -637,10 +655,23 @@ mod tests {
         child.has_idle_notification = true;
         app.workspaces.push(child);
 
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![
+                piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                    "/tmp/agent-multi",
+                )),
+                piki_core::projects::ProjectMember::new(std::path::PathBuf::from("/tmp/nightly")),
+            ],
+        }];
+
         app.active_workspace = 0;
+        // Rows: [project, agent-multi, nightly]; collapse the project.
         app.selected_sidebar_row = 0;
-        app.collapsed_groups
-            .insert(repo.to_string_lossy().to_string());
+        app.collapsed_groups.insert("project:1".to_string());
 
         terminal
             .draw(|frame| {
@@ -649,7 +680,7 @@ mod tests {
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
         insta::assert_snapshot!(
-            "workspace_list_collapsed_family_surfaces_child_attention",
+            "sidebar_collapsed_project_surfaces_child_attention",
             content
         );
     }
@@ -667,13 +698,9 @@ mod tests {
             workspace_type: piki_core::WorkspaceType::Simple,
             description: String::new(),
             prompt: String::new(),
-            kanban_path: None,
             order: 0,
             source_repo: std::path::PathBuf::from("/tmp/demo"),
             source_repo_display: String::new(),
-            dispatch_card_id: None,
-            dispatch_source_kanban: None,
-            dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
@@ -913,118 +940,58 @@ mod tests {
         insta::assert_snapshot!("sessions_overlay", content);
     }
 
+    /// The sidebar tree: two projects, their flat checkout rows, plus a
+    /// plain-directory member and the no-project bucket.
     #[test]
-    fn test_snapshot_projects_overlay_list_with_one_expanded() {
-        let mut terminal = test_terminal(80, 24);
+    fn test_snapshot_sidebar_project_tree() {
+        let mut terminal = test_terminal(30, 14);
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
         app.config.platform = crate::config::Platform::Linux;
-        // A registered workspace at /tmp/nightly so the matching member row
-        // resolves to its name; the other member stays a dimmed directory.
-        app.workspaces.push(test_workspace("nightly", 0));
-        let frontend = piki_core::projects::Project {
-            id: Some(1),
-            name: "frontend".to_string(),
-            color: 0,
-            order: 0,
-            members: vec![
-                piki_core::projects::ProjectMember {
-                    path: std::path::PathBuf::from("/tmp/nightly"),
-                },
-                piki_core::projects::ProjectMember {
-                    path: std::path::PathBuf::from("/home/user/notes"),
-                },
-            ],
-        };
-        let backend = piki_core::projects::Project {
-            id: Some(2),
-            name: "backend".to_string(),
-            color: 6,
-            order: 1,
-            members: vec![piki_core::projects::ProjectMember {
-                path: std::path::PathBuf::from("/tmp/api"),
-            }],
-        };
-        app.active_dialog = Some(DialogState::Projects {
-            projects: vec![frontend, backend],
-            selected: 1,
-            expanded: std::collections::HashSet::from([1]),
-            scroll_offset: 0,
-        });
-        app.mode = crate::app::AppMode::Projects;
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("projects_overlay_list", content);
-    }
-
-    #[test]
-    fn test_snapshot_projects_overlay_truncates_long_rows() {
-        let mut terminal = test_terminal(60, 20);
-        let mut app = App::new(
-            test_storage(),
-            &piki_core::paths::DataPaths::default_paths(),
-        );
-        app.config.platform = crate::config::Platform::Linux;
-        // Name beyond the 28-column field and a member path beyond the popup
-        // width: both must ellipsize instead of clipping at the border.
-        let project = piki_core::projects::Project {
-            id: Some(1),
-            name: "a-project-name-well-beyond-the-28-column-field".to_string(),
-            color: 3,
-            order: 0,
-            members: vec![piki_core::projects::ProjectMember {
-                path: std::path::PathBuf::from(
-                    "/home/user/some/very/deeply/nested/checkout/of/feature/branch-with-a-very-long-name",
-                ),
-            }],
-        };
-        app.active_dialog = Some(DialogState::Projects {
-            projects: vec![project],
-            selected: 0,
-            expanded: std::collections::HashSet::from([1]),
-            scroll_offset: 0,
-        });
-        app.mode = crate::app::AppMode::Projects;
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("projects_overlay_truncated", content);
-    }
-
-    #[test]
-    fn test_snapshot_sidebar_projects_tab() {
-        let mut terminal = test_terminal(30, 12);
-        let mut app = App::new(
-            test_storage(),
-            &piki_core::paths::DataPaths::default_paths(),
-        );
-        app.config.platform = crate::config::Platform::Linux;
-        // A registered workspace at /tmp/nightly so the matching member row
-        // resolves to its name; the other member stays a dimmed directory.
-        app.workspaces.push(test_workspace("nightly", 0));
-        app.sidebar_view = crate::app::SidebarView::Projects;
+        // Two checkouts of one repo (clone + worktree) in the first project, a
+        // second repo in the second project, and one loose workspace.
+        let mut nightly = test_workspace("nightly", 0);
+        nightly.info.workspace_type = piki_core::WorkspaceType::Simple;
+        nightly.info.path = std::path::PathBuf::from("/tmp/nightly");
+        nightly.info.source_repo = std::path::PathBuf::from("/repos/piki");
+        nightly.info.source_repo_display = "piki".to_string();
+        nightly.branch = Some("nightly".to_string());
+        let mut feature = test_workspace("feature", 1);
+        feature.info.path = std::path::PathBuf::from("/tmp/feature");
+        feature.info.source_repo = std::path::PathBuf::from("/repos/piki");
+        feature.info.source_repo_display = "piki".to_string();
+        feature.info.workspace_type = piki_core::WorkspaceType::Worktree;
+        feature.branch = Some("feat/sidebar".to_string());
+        let mut api = test_workspace("api", 2);
+        api.info.path = std::path::PathBuf::from("/tmp/api");
+        api.info.source_repo = std::path::PathBuf::from("/repos/api");
+        api.info.source_repo_display = "api".to_string();
+        api.branch = Some("main".to_string());
+        let mut loose = test_workspace("loose", 3);
+        loose.info.path = std::path::PathBuf::from("/tmp/loose");
+        loose.info.source_repo = std::path::PathBuf::from("/repos/loose");
+        loose.info.source_repo_display = "loose".to_string();
+        app.workspaces = vec![nightly, feature, api, loose];
         app.sidebar_projects = vec![
             piki_core::projects::Project {
                 id: Some(1),
                 name: "frontend".to_string(),
                 color: 0,
                 order: 0,
+                // Both checkouts of the repo are members: nothing joins a
+                // project on its own (see `projects::tree`).
                 members: vec![
-                    piki_core::projects::ProjectMember {
-                        path: std::path::PathBuf::from("/tmp/nightly"),
-                    },
-                    piki_core::projects::ProjectMember {
-                        path: std::path::PathBuf::from("/home/user/notes"),
-                    },
+                    piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                        "/tmp/nightly",
+                    )),
+                    piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                        "/tmp/feature",
+                    )),
+                    piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                        "/home/user/notes",
+                    )),
                 ],
             },
             piki_core::projects::Project {
@@ -1032,25 +999,24 @@ mod tests {
                 name: "backend".to_string(),
                 color: 6,
                 order: 1,
-                members: vec![piki_core::projects::ProjectMember {
-                    path: std::path::PathBuf::from("/tmp/api"),
-                }],
+                members: vec![piki_core::projects::ProjectMember::new(
+                    std::path::PathBuf::from("/tmp/api"),
+                )],
             },
         ];
-        app.projects_expanded = std::collections::HashSet::from([1]);
-        app.selected_project_row = 1;
-        app.ws_list_area = ratatui::layout::Rect::new(0, 0, 30, 12);
+        app.selected_sidebar_row = 2;
+        app.ws_list_area = ratatui::layout::Rect::new(0, 0, 30, 14);
         terminal
             .draw(|frame| {
                 super::sidebar::render_workspace_list(
                     frame,
-                    ratatui::layout::Rect::new(0, 0, 30, 12),
+                    ratatui::layout::Rect::new(0, 0, 30, 14),
                     &app,
                 );
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("sidebar_projects_tab", content);
+        insta::assert_snapshot!("sidebar_project_tree", content);
     }
 
     #[test]
@@ -1062,7 +1028,6 @@ mod tests {
         );
         app.config.platform = crate::config::Platform::Linux;
         app.active_dialog = Some(DialogState::ProjectEdit {
-            return_to_list: true,
             editing_id: Some(1),
             name: "frontend".to_string(),
             name_cursor: 8,

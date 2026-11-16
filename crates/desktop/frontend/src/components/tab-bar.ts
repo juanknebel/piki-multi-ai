@@ -26,7 +26,6 @@ import {
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
 import { destroyWebPreviewPanel } from "./web-preview-panel";
-import { destroyKanbanPanel } from "./kanban-panel";
 import { destroyApiPanel } from "./api-panel";
 import { contentLabel } from "./open-content";
 import { icon } from "./icons";
@@ -549,22 +548,21 @@ async function releasePtyContents(wsIdx: number, contents: TabInfo[], mode: Clos
   return released;
 }
 
-/** Drop the frontend panel of a non-PTY content. Kanban / API also have a
+/** Drop the frontend panel of a non-PTY content. API also has a
  *  (PTY-less) backend tab, released through `releaseBackendOnly`. */
 function destroyFrontendPanel(c: TabInfo) {
   if (c.provider === "Markdown") destroyMarkdownEditorPanel(c.id);
   else if (c.provider === "CodeEditor") destroyCodeEditorPanel(c.id);
   else if (c.provider === "WebPreview") destroyWebPreviewPanel(c.id);
-  else if (c.provider === "Kanban") destroyKanbanPanel(c.id);
   else if (c.provider === "Api") destroyApiPanel(c.id);
 }
 
-/** Close the backend tab of Kanban / API contents (no process behind them,
+/** Close the backend tab of API contents (no process behind them,
  *  so no confirm) — otherwise the backend list drifts from ours and every
  *  later index-based call is off by one. Highest index first. */
 async function releaseBackendOnly(wsIdx: number, contents: TabInfo[]) {
   const ordered = contents
-    .filter((c) => c.provider === "Kanban" || c.provider === "Api")
+    .filter((c) => c.provider === "Api")
     .map((c) => ({ c, idx: appState.backendTabIndex(wsIdx, c.id) }))
     .filter(({ idx }) => idx >= 0)
     .sort((a, b) => b.idx - a.idx);

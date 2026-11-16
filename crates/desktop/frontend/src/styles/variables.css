@@ -89,7 +89,7 @@
   /* derived: text painted on top of an --error-color background */
   --on-error: #fff;
   /* derived: secondary hue (ANSI magenta) — welcome gradient end, wishlist
-     priority, JSON booleans, kanban "in review" */
+     priority, JSON booleans */
   --accent-alt: #bc8cff;
   /* derived: ::selection background (accent at 25%) */
   --selection-bg: rgba(57, 186, 230, 0.25);
@@ -114,30 +114,6 @@
   --icon-muted: #5d7080;
   --icon-default: #768390;
   --icon-folder: #5d7080;
-
-  /* ── Kanban (derived from the accent + ANSI palette) ── */
-  /* Column defaults and the 16 picker swatches; kanban-panel.ts stores
-     `var(--kanban-swatch-N)` so a saved choice follows the theme. */
-  --kanban-col-todo: #39bae6;
-  --kanban-col-in-progress: #e6a730;
-  --kanban-col-in-review: #7b61ff;
-  --kanban-col-done: #3fb950;
-  --kanban-swatch-1: #39bae6;
-  --kanban-swatch-2: #e6a730;
-  --kanban-swatch-3: #7b61ff;
-  --kanban-swatch-4: #3fb950;
-  --kanban-swatch-5: #f85149;
-  --kanban-swatch-6: #f778ba;
-  --kanban-swatch-7: #d2a8ff;
-  --kanban-swatch-8: #79c0ff;
-  --kanban-swatch-9: #56d4dd;
-  --kanban-swatch-10: #a5d6ff;
-  --kanban-swatch-11: #ffa657;
-  --kanban-swatch-12: #ff7b72;
-  --kanban-swatch-13: #8b949e;
-  --kanban-swatch-14: #c9d1d9;
-  --kanban-swatch-15: #e3b341;
-  --kanban-swatch-16: #7ee787;
 
   /* ── Projects (projects-panel.ts / project-dialog.ts) ── */
   /* The 10 fixed project swatches. Projects store the palette INDEX, and
@@ -170,7 +146,7 @@
   --dialog-shadow: rgba(0, 0, 0, 0.65);
   /* Scrims behind modals — dark tone here, lighter in the light-tone block */
   --scrim: rgba(0, 0, 0, 0.55);        /* dialog backdrops, overlay container */
-  --scrim-strong: rgba(0, 0, 0, 0.6);  /* in-panel overlays: kanban edit, file viewer, API history */
+  --scrim-strong: rgba(0, 0, 0, 0.6);  /* in-panel overlays: file viewer, API history */
   --scrim-soft: rgba(0, 0, 0, 0.35);   /* command palette */
   /* Elevation shadows — every box-shadow in styles/ is one of these */
   --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.4);  /* tooltips, pickers, cards, terminal search */
@@ -213,7 +189,7 @@
   --fs-4xl: 1.6rem;   /* 20px md h1 */
   --fs-display-sm: 2.24rem; /* 28px welcome logo */
   --fs-display: 2.56rem;    /* 32px empty-state glyph */
-  --fs-display-lg: 3.84rem; /* 48px kanban empty glyph */
+  --fs-display-lg: 3.84rem; /* 48px empty-state glyph */
   /* Line heights */
   --leading-none: 1;
   --leading-tight: 1.4;
@@ -274,7 +250,7 @@
   /* Every stacking level in styles/ is one of these (or a `calc()` of one). */
   --z-canvas: 0;     /* fixed decoration under every surface (noise) */
   --z-panel: 1;      /* raised inside a panel: sticky headers, resize handles */
-  --z-sticky: 10;    /* bars floating over panel content: terminal search, kanban pickers */
+  --z-sticky: 10;    /* bars floating over panel content: terminal search, dropdowns */
   --z-backdrop: 100; /* modal backdrops: dialogs, confirms, in-panel overlays */
   --z-dialog: 110;   /* a modal stacked on an open dialog: palette, file viewer, nested form */
   --z-menu: 200;     /* menu-bar dropdowns (+ click-away backdrop at --z-menu - 1) */

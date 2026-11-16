@@ -234,7 +234,6 @@ mod tests {
             "test".to_string(),
             String::new(),
             String::new(),
-            None,
             PathBuf::from(path),
             PathBuf::from(path),
         );

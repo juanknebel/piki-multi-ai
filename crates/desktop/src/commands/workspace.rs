@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
@@ -6,12 +8,90 @@ use piki_core::{WorkspaceInfo, WorkspaceStatus};
 
 use crate::state::{DesktopApp, DesktopWorkspace, WorkspaceDetail};
 
+/// Register a freshly-created/imported workspace: assign the next display
+/// order, push it (with its file watcher) onto `app.workspaces`, and persist
+/// the whole list keyed by its `source_repo`. Shared tail of
+/// `create_workspace`, `create_github_workspace` and `import_existing_worktree`.
+fn register_new_workspace(app: &mut DesktopApp, mut info: WorkspaceInfo) -> WorkspaceInfo {
+    let watcher = FileWatcher::new(info.path.clone(), info.name.clone()).ok();
+    let order = app
+        .workspaces
+        .iter()
+        .map(|ws| ws.info.order)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    info.order = order;
+
+    app.workspaces.push(DesktopWorkspace {
+        info: info.clone(),
+        status: WorkspaceStatus::Idle,
+        changed_files: Vec::new(),
+        ahead_behind: None,
+        branch: None,
+        tabs: Vec::new(),
+        active_tab: 0,
+        watcher,
+        file_index: None,
+    });
+
+    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
+    let _ = app
+        .storage
+        .workspaces
+        .save_workspaces(&info.source_repo, &all_infos);
+
+    info
+}
+
+/// One entry of `list_workspaces`: the workspace plus its current branch,
+/// resolved warm so the first paint already shows every repo's branch.
+#[derive(serde::Serialize)]
+pub struct WorkspaceListEntry {
+    pub info: WorkspaceInfo,
+    /// Current git branch; `None` for a non-git directory / detached HEAD.
+    pub branch: Option<String>,
+}
+
+/// Resolve the current branch for each path, in order. One cheap `git` call
+/// per workspace — no lock held across these.
+async fn resolve_branches(paths: &[PathBuf]) -> Vec<Option<String>> {
+    let mut out = Vec::with_capacity(paths.len());
+    for path in paths {
+        out.push(piki_core::git::get_current_branch(path).await);
+    }
+    out
+}
+
 #[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, Mutex<DesktopApp>>,
-) -> Result<Vec<WorkspaceInfo>, String> {
-    let app = state.lock();
-    Ok(app.workspaces.iter().map(|ws| ws.info.clone()).collect())
+) -> Result<Vec<WorkspaceListEntry>, String> {
+    let infos: Vec<WorkspaceInfo> = {
+        let app = state.lock();
+        app.workspaces.iter().map(|ws| ws.info.clone()).collect()
+    };
+    // Resolved fresh (not from the cache): at boot the git watcher hasn't
+    // polled yet, and this list is what the frontend paints first. Changed
+    // files / ahead-behind stay on the watcher — they are slow on big trees.
+    let paths: Vec<PathBuf> = infos.iter().map(|i| i.path.clone()).collect();
+    let branches = resolve_branches(&paths).await;
+    // Store what was resolved so later `switch_workspace` details agree with
+    // what the list already told the frontend (matched by path: the list may
+    // have shifted if a workspace was added or removed mid-call).
+    {
+        let mut app = state.lock();
+        for (info, branch) in infos.iter().zip(branches.iter()) {
+            if let Some(ws) = app.workspaces.iter_mut().find(|w| w.info.path == info.path) {
+                ws.branch = branch.clone();
+            }
+        }
+    }
+    Ok(infos
+        .into_iter()
+        .zip(branches)
+        .map(|(info, branch)| WorkspaceListEntry { info, branch })
+        .collect())
 }
 
 /// Returns the suggested default destination folder for a GitHub clone:
@@ -81,7 +161,6 @@ pub async fn switch_workspace(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_workspace(
     state: State<'_, Mutex<DesktopApp>>,
@@ -90,15 +169,11 @@ pub async fn create_workspace(
     prompt: String,
     dir: String,
     ws_type: String,
-    kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     // Extract manager info with scoped lock
-    let (manager, storage) = {
+    let manager = {
         let app = state.lock();
-        let manager =
-            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
-        let storage = std::sync::Arc::clone(&app.storage);
-        (manager, storage)
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
     };
 
     let source_repo = std::path::PathBuf::from(&dir);
@@ -106,68 +181,23 @@ pub async fn create_workspace(
     // Async workspace creation (no lock held)
     let info = match ws_type.as_str() {
         "Simple" => manager
-            .create_simple(
-                &name,
-                &description,
-                &prompt,
-                kanban_path.clone(),
-                &source_repo,
-            )
+            .create_simple(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
         "Project" => manager
-            .create_project(
-                &name,
-                &description,
-                &prompt,
-                kanban_path.clone(),
-                &source_repo,
-            )
+            .create_project(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
         _ => manager
-            .create(&name, &description, &prompt, kanban_path, &source_repo)
+            .create(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
     };
 
-    let mut result_info = info.clone();
-
-    let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
-
-    // Re-lock to update state
     let mut app = state.lock();
-    let order = app
-        .workspaces
-        .iter()
-        .map(|ws| ws.info.order)
-        .max()
-        .unwrap_or(0)
-        + 1;
-    result_info.order = order;
-
-    app.workspaces.push(DesktopWorkspace {
-        info: result_info.clone(),
-        status: WorkspaceStatus::Idle,
-        changed_files: Vec::new(),
-        ahead_behind: None,
-        branch: None,
-        tabs: Vec::new(),
-        active_tab: 0,
-        watcher,
-        file_index: None,
-    });
-
-    // Save to storage — use the new workspace's source_repo as the key
-    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
-    let _ = storage
-        .workspaces
-        .save_workspaces(&result_info.source_repo, &all_infos);
-
-    Ok(result_info)
+    Ok(register_new_workspace(&mut app, info))
 }
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_github_workspace(
     state: State<'_, Mutex<DesktopApp>>,
@@ -176,61 +206,88 @@ pub async fn create_github_workspace(
     prompt: String,
     github_url: String,
     destination_dir: String,
-    kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
-    let (manager, storage) = {
+    let manager = {
         let app = state.lock();
-        let manager =
-            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
-        let storage = std::sync::Arc::clone(&app.storage);
-        (manager, storage)
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
     };
 
     let destination_path = std::path::PathBuf::from(destination_dir);
     let info = manager
-        .create_from_github(
+        .create_from_github(&name, &description, &prompt, &github_url, &destination_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut app = state.lock();
+    Ok(register_new_workspace(&mut app, info))
+}
+
+/// One entry from `git worktree list`, for the "Load Existing Worktree"
+/// picker in the Create Worktree dialog.
+#[derive(serde::Serialize)]
+pub struct ExistingWorktreeInfo {
+    pub path: String,
+    pub branch: String,
+}
+
+/// List git worktrees for the repo backing `source_repo` (a GitHub-origin
+/// workspace's `source_repo`), excluding ones already registered as
+/// workspaces. Mirrors the TUI's `Action::ListWorktrees`.
+#[tauri::command]
+pub async fn list_worktrees(
+    state: State<'_, Mutex<DesktopApp>>,
+    source_repo: String,
+) -> Result<Vec<ExistingWorktreeInfo>, String> {
+    let (manager, registered) = {
+        let app = state.lock();
+        (
+            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone()),
+            app.workspaces
+                .iter()
+                .map(|ws| ws.info.path.clone())
+                .collect::<Vec<_>>(),
+        )
+    };
+    let found = manager
+        .list_worktrees(&std::path::PathBuf::from(&source_repo))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(found
+        .into_iter()
+        .filter(|w| !registered.contains(&w.path))
+        .map(|w| ExistingWorktreeInfo {
+            path: w.path.to_string_lossy().to_string(),
+            branch: w.branch,
+        })
+        .collect())
+}
+
+/// Register an already-existing worktree directory (from `list_worktrees`)
+/// as a new workspace, without shelling out to `git worktree add`. Mirrors
+/// the TUI's `Action::ImportExistingWorktree`.
+#[tauri::command]
+pub async fn import_existing_worktree(
+    state: State<'_, Mutex<DesktopApp>>,
+    source_repo: String,
+    path: String,
+    branch: String,
+) -> Result<WorkspaceInfo, String> {
+    let manager = {
+        let app = state.lock();
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
+    };
+    let name = branch.rsplit('/').next().unwrap_or(&branch).to_string();
+    let info = manager
+        .import_existing_worktree(
             &name,
-            &description,
-            &prompt,
-            kanban_path,
-            &github_url,
-            &destination_path,
+            std::path::PathBuf::from(&path),
+            std::path::PathBuf::from(&source_repo),
         )
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut result_info = info.clone();
-
-    let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
-
     let mut app = state.lock();
-    let order = app
-        .workspaces
-        .iter()
-        .map(|ws| ws.info.order)
-        .max()
-        .unwrap_or(0)
-        + 1;
-    result_info.order = order;
-
-    app.workspaces.push(DesktopWorkspace {
-        info: result_info.clone(),
-        status: WorkspaceStatus::Idle,
-        changed_files: Vec::new(),
-        ahead_behind: None,
-        branch: None,
-        tabs: Vec::new(),
-        active_tab: 0,
-        watcher,
-        file_index: None,
-    });
-
-    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
-    let _ = storage
-        .workspaces
-        .save_workspaces(&result_info.source_repo, &all_infos);
-
-    Ok(result_info)
+    Ok(register_new_workspace(&mut app, info))
 }
 
 #[tauri::command]
@@ -306,7 +363,6 @@ pub async fn update_workspace(
     index: usize,
     prompt: Option<String>,
     description: Option<String>,
-    kanban_path: Option<String>,
 ) -> Result<(), String> {
     let mut app = state.lock();
     if index >= app.workspaces.len() {
@@ -319,9 +375,6 @@ pub async fn update_workspace(
     }
     if let Some(d) = description {
         ws.info.description = d;
-    }
-    if let Some(k) = kanban_path {
-        ws.info.kanban_path = if k.is_empty() { None } else { Some(k) };
     }
 
     // Persist — use the updated workspace's source_repo as the key
@@ -369,35 +422,75 @@ pub async fn set_collapsed_groups(
         .map_err(|e| format!("Failed to save collapsed groups: {e}"))
 }
 
-/// Serializable view of `core::workspace::SidebarRow` for the frontend.
+/// Serializable view of one `piki_core::projects::tree::ProjectTreeRow`.
 ///
-/// The frontend used to compute this itself, in TypeScript, and had never
-/// implemented the PR-review group — so review workspaces rendered ungrouped
-/// here while the TUI grouped them. Grouping is now decided in one place.
+/// Flattened on purpose: the frontend renders rows, it does not re-derive the
+/// tree. Grouping (which repo a checkout belongs to, what is collapsed, where
+/// the synthetic buckets go) is decided once, in core, so this app and the TUI
+/// cannot drift apart — the way they did when the family rule lived in
+/// TypeScript too and the PR-review group was never implemented here.
 #[derive(serde::Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub enum SidebarRowDto {
-    /// Header for the synthetic PR-review group. Carries its own collapse key
-    /// so the frontend never has to hardcode one.
-    PrReviewHeader { collapsed: bool, family_key: String },
-    /// A real workspace: `index` points into `list_workspaces`' order.
-    Workspace {
-        index: usize,
-        /// "standalone" | "parent" | "child"
-        kind: &'static str,
-        /// Collapse key — present on parents only.
-        family_key: Option<String>,
-        /// Whether this parent's children are hidden — parents only.
-        collapsed: Option<bool>,
+pub enum ProjectTreeRowDto {
+    /// A top-level header: a real project, or the synthetic PR-review bucket.
+    /// (Loose repositories get no header — they render at depth 0.)
+    Project {
+        /// Collapse key.
+        key: String,
+        collapsed: bool,
+        /// Workspace indices this row hides while collapsed, so the frontend
+        /// can roll their attention signals onto it. Empty when expanded.
+        hidden: Vec<usize>,
+        /// `Some(id)` for a real project (`None` for an unsaved one);
+        /// `None` for a bucket.
+        project_id: Option<i64>,
+        /// Project name, or "" for a bucket (the frontend names those).
+        name: String,
+        /// Palette index of a real project; `None` for a bucket.
+        color: Option<u8>,
+        /// "project" | "prReview" | "unassigned"
+        bucket: &'static str,
     },
+    /// A repository with nothing loaded — an explicit repo member, rendered
+    /// as a single "not open" row the frontend adopts on open. The only repo
+    /// row there is: loaded checkouts never get a header above them.
+    Repo {
+        /// Absolute repository root.
+        root: String,
+        /// Display name for the root.
+        display: String,
+        /// 1 under a project header, 0 for a loose repository.
+        depth: u8,
+    },
+    /// A loaded workspace: `index` points into `list_workspaces`' order. One
+    /// flat row per checkout — siblings never nest.
+    Checkout {
+        index: usize,
+        /// "primary" (the original clone) | "worktree"
+        kind: &'static str,
+        /// Indentation level: 1 under a project header, 0 when loose.
+        depth: u8,
+        /// This row stands in for its repository: label it by the repository
+        /// folder (branch alongside) and let repository actions apply to it.
+        /// `false` only for rows with no repository to name (a plain-directory
+        /// workspace, a PR review).
+        hoisted: bool,
+        /// The primary of a repo group with worktree rows beside it — the
+        /// "parent" the tree highlights (`family-parent`).
+        is_parent: bool,
+    },
+    /// A member path that is neither a loaded workspace nor a repo root.
+    Dir { path: String },
 }
 
-/// Visual sidebar rows in render order, with families and the PR-review group
-/// already resolved against the saved collapse state.
+/// The sidebar's rows in render order: the project tree, with collapse state
+/// already applied. The ONE sidebar model — there is no flat workspace view.
 #[tauri::command]
-pub async fn sidebar_rows(
+pub async fn project_tree(
     state: State<'_, Mutex<DesktopApp>>,
-) -> Result<Vec<SidebarRowDto>, String> {
+) -> Result<Vec<ProjectTreeRowDto>, String> {
+    use piki_core::projects::tree::{Bucket, CheckoutKind, ProjectTreeRow};
+
     let app = state.lock();
     let collapsed = app
         .storage
@@ -405,40 +498,151 @@ pub async fn sidebar_rows(
         .as_ref()
         .and_then(|p| p.get_collapsed_groups().ok())
         .unwrap_or_default();
+    let projects = app
+        .storage
+        .projects
+        .as_ref()
+        .map(|s| s.list_projects())
+        .unwrap_or_default();
     let infos: Vec<piki_core::WorkspaceInfo> =
         app.workspaces.iter().map(|w| w.info.clone()).collect();
 
-    Ok(piki_core::workspace::sidebar_rows(&infos, &collapsed)
-        .into_iter()
-        .map(|row| match row {
-            piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
-                SidebarRowDto::PrReviewHeader {
+    // What a collapsed row hides is decided in core too: deriving it here from
+    // `source_repo` would reintroduce the membership inference the tree
+    // dropped (a project would answer for checkouts nobody put in it).
+    let mut hidden = piki_core::projects::tree::hidden_checkouts(&projects, &infos);
+
+    Ok(
+        piki_core::projects::tree::project_tree(&projects, &infos, &collapsed)
+            .into_iter()
+            .map(|row| match row {
+                ProjectTreeRow::Project {
+                    bucket,
+                    key,
                     collapsed,
-                    family_key: piki_core::workspace::PR_REVIEW_GROUP_KEY.to_string(),
-                }
-            }
-            piki_core::workspace::SidebarRow::Workspace { index, kind } => match kind {
-                piki_core::workspace::RowKind::Parent { key, collapsed } => {
-                    SidebarRowDto::Workspace {
-                        index,
-                        kind: "parent",
-                        family_key: Some(key),
-                        collapsed: Some(collapsed),
+                } => {
+                    let (project_id, name, color, tag) = match bucket {
+                        Bucket::Project(i) => {
+                            let p = &projects[i];
+                            (p.id, p.name.clone(), Some(p.clamped_color()), "project")
+                        }
+                        Bucket::PrReview => (None, String::new(), None, "prReview"),
+                        Bucket::Unassigned => (None, String::new(), None, "unassigned"),
+                    };
+                    ProjectTreeRowDto::Project {
+                        hidden: if collapsed {
+                            hidden.remove(&key).unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        },
+                        key,
+                        collapsed,
+                        project_id,
+                        name,
+                        color,
+                        bucket: tag,
                     }
                 }
-                piki_core::workspace::RowKind::Child => SidebarRowDto::Workspace {
-                    index,
-                    kind: "child",
-                    family_key: None,
-                    collapsed: None,
+                ProjectTreeRow::Repo {
+                    root,
+                    display,
+                    depth,
+                    ..
+                } => ProjectTreeRowDto::Repo {
+                    root: root.to_string_lossy().into_owned(),
+                    display,
+                    depth,
                 },
-                piki_core::workspace::RowKind::Standalone => SidebarRowDto::Workspace {
-                    index,
-                    kind: "standalone",
-                    family_key: None,
-                    collapsed: None,
+                ProjectTreeRow::Checkout {
+                    workspace_index,
+                    kind,
+                    depth,
+                    hoisted,
+                    is_parent,
+                    ..
+                } => ProjectTreeRowDto::Checkout {
+                    index: workspace_index,
+                    kind: match kind {
+                        CheckoutKind::Primary => "primary",
+                        CheckoutKind::Worktree => "worktree",
+                    },
+                    depth,
+                    hoisted,
+                    is_parent,
                 },
-            },
-        })
-        .collect())
+                ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
+                    path: path.to_string_lossy().into_owned(),
+                },
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The checkout row's wire shape: the frontend reads `is_parent` in
+    /// snake_case (like `project_id`) — a serde rename would silently drop
+    /// the parent highlight, so lock the field names here.
+    #[test]
+    fn test_checkout_dto_serializes_parent_flag() {
+        let row = ProjectTreeRowDto::Checkout {
+            index: 2,
+            kind: "primary",
+            depth: 1,
+            hoisted: true,
+            is_parent: true,
+        };
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["type"], "checkout");
+        assert_eq!(json["is_parent"], true);
+    }
+
+    /// `resolve_branches` answers one entry per path, in order: the branch
+    /// for a git checkout, `None` for a plain directory. This is what
+    /// `list_workspaces` paints on the first frame.
+    #[tokio::test]
+    async fn test_resolve_branches_git_and_plain_dir() {
+        if std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("git not installed; skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                // Isolate from the developer's global config (signing, hooks…).
+                .env("HOME", &root)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .expect("run git");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        git(&["init", "-q"]);
+        git(&["checkout", "-q", "-b", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "init"]);
+
+        let plain = tempfile::tempdir().unwrap();
+        let plain_root = plain.path().to_path_buf();
+
+        let branches = resolve_branches(&[root, plain_root]).await;
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0].as_deref(), Some("main"));
+        assert_eq!(branches[1], None);
+    }
 }

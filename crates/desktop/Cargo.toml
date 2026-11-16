@@ -12,7 +12,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 piki-core = { path = "../core", package = "piki-core" }
-piki-multiplex = { git = "https://github.com/juanknebel/piki-multiplex", branch = "main" }
+piki-multiplex = { git = "https://github.com/juanknebel/piki-multiplex", tag = "v0.5.1" }
 piki-api-client = { path = "../api-client", package = "piki-api-client" }
 piki-agent = { path = "../agent", package = "piki-agent" }
 tauri = { version = "2", features = ["devtools"] }
@@ -24,14 +24,16 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 portable-pty = "0.9"
-parking_lot = "0.12"
+parking_lot = "0.13"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.23"
 chrono = "0.4"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
 tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 toml = "1.1"
+
+[dev-dependencies]
+tempfile = "3"

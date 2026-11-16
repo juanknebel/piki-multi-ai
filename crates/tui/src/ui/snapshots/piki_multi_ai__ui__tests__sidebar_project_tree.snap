@@ -1,0 +1,19 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 1029
+expression: content
+---
+╭ PROJECTS ──────────────────╮
+│ ▾ ● frontend               │
+│    ◉ piki (nightly)        │
+│▎   ⎇ piki (feat/sidebar)   │
+│  🗁 /home/user/notes        │
+│                            │
+│ ▾ ● backend                │
+│    ⎇ api (main)            │
+│   ⎇ loose (loose)          │
+│                            │
+│                            │
+│                            │
+│                            │
+╰────────────────────────────╯

@@ -23,3 +23,31 @@ export function branchLabel(branch: string | null | undefined, max = BRANCH_LABE
   if (!branch) return "—";
   return truncateMiddle(branch, max);
 }
+
+/** Longest directory label painted where the chrome is a fixed-width,
+ *  single-line slot (menus, one-line rows); the middle is elided beyond it
+ *  so the root and the leaf stay visible. A surface with room to wrap —
+ *  the project dialog's member rows — prints `homeRelative` instead: a
+ *  character cap there elides the tail even when the width allows it. */
+export const PATH_LABEL_MAX = 46;
+
+/** `path` rewritten relative to `home` (`/home/zero/git/x` → `~/git/x`).
+ *  Paths outside the home directory — and a missing/empty `home` — pass
+ *  through untouched. */
+export function homeRelative(path: string, home: string | null | undefined): string {
+  if (!home) return path;
+  const base = home.replace(/\/+$/, "");
+  if (!base) return path;
+  if (path === base) return "~";
+  return path.startsWith(`${base}/`) ? `~${path.slice(base.length)}` : path;
+}
+
+/** The one directory-label rule: home-relative, then middle-truncated.
+ *  Callers put the full path in a `title` (the tooltip never truncates). */
+export function pathLabel(
+  path: string,
+  home: string | null | undefined,
+  max = PATH_LABEL_MAX,
+): string {
+  return truncateMiddle(homeRelative(path, home), max);
+}

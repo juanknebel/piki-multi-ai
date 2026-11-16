@@ -537,13 +537,12 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
             frame.render_widget(text, popup);
         }
         NewTabMenu::Tools => {
-            let popup = super::clear_popup(frame, area, 40, 10);
+            let popup = super::clear_popup(frame, area, 40, 9);
             let lines = vec![
                 Line::from(""),
-                Line::from("  [1] Kanban Board"),
-                Line::from("  [2] Code Review"),
-                Line::from("  [3] API Explorer"),
-                Line::from("  [4] Git (lazygit)"),
+                Line::from("  [1] Code Review"),
+                Line::from("  [2] API Explorer"),
+                Line::from("  [3] Git (lazygit)"),
                 Line::from(""),
                 Line::from("  [Esc] back"),
             ];

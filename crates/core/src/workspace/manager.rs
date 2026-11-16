@@ -69,7 +69,6 @@ impl WorkspaceManager {
         name: &str,
         description: &str,
         prompt: &str,
-        kanban_path: Option<String>,
         source_dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
         let git_root = Self::git_root(source_dir).await?;
@@ -208,7 +207,6 @@ impl WorkspaceManager {
             name.to_string(),
             description.to_string(),
             prompt.to_string(),
-            kanban_path,
             worktree_path,
             git_root,
         );
@@ -227,7 +225,6 @@ impl WorkspaceManager {
         name: &str,
         description: &str,
         prompt: &str,
-        kanban_path: Option<String>,
         dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
         let (source_repo, origin, is_git_repo) = match Self::git_root(dir).await {
@@ -242,7 +239,6 @@ impl WorkspaceManager {
             name.to_string(),
             description.to_string(),
             prompt.to_string(),
-            kanban_path,
             dir.clone(),
             source_repo,
         );
@@ -264,7 +260,6 @@ impl WorkspaceManager {
         name: &str,
         description: &str,
         prompt: &str,
-        kanban_path: Option<String>,
         github_url: &str,
         destination_dir: &std::path::Path,
     ) -> anyhow::Result<WorkspaceInfo> {
@@ -318,7 +313,6 @@ impl WorkspaceManager {
             name.to_string(),
             description.to_string(),
             prompt.to_string(),
-            kanban_path,
             destination.clone(),
             destination,
         );
@@ -353,7 +347,6 @@ impl WorkspaceManager {
             name,
             checkout.pr.title.clone(),
             String::new(),
-            None,
             checkout.path.clone(),
             checkout.path.clone(),
         );
@@ -374,14 +367,12 @@ impl WorkspaceManager {
         name: &str,
         description: &str,
         prompt: &str,
-        kanban_path: Option<String>,
         dir: &std::path::Path,
     ) -> anyhow::Result<WorkspaceInfo> {
         let mut info = WorkspaceInfo::new(
             name.to_string(),
             description.to_string(),
             prompt.to_string(),
-            kanban_path,
             dir.to_path_buf(),
             dir.to_path_buf(),
         );
@@ -504,7 +495,6 @@ impl WorkspaceManager {
             name.to_string(),
             String::new(),
             String::new(),
-            None,
             worktree_path,
             source_repo,
         );

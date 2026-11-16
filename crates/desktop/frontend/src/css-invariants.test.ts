@@ -1,4 +1,4 @@
-// Stylesheet invariants (crates/desktop/CLAUDE.md "CSS tokens" / phase 13):
+// Stylesheet invariants (crates/desktop/AGENTS.md "CSS tokens" / phase 13):
 // read every sheet in styles/ as text — no DOM — and fail the build
 // when a future change reintroduces what the token layer and the focus-ring
 // work removed.

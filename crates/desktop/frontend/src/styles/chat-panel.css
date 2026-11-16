@@ -35,6 +35,13 @@
   border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
+/* Running token totals in the header (OpenRouter / llama.cpp only). */
+.chat-usage {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── Model selector ─────────────────────────────── */
 
 .chat-model-bar {

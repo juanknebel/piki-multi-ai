@@ -3,7 +3,10 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
 import { attachPathPicker } from "../path-picker";
+import { attachDialogResize } from "../dialog-resize";
 import type { WorkspaceInfo } from "../../types";
+import type { ExistingWorktreeInfo } from "../../ipc";
+import { projectById, setProjectMembership } from "../projects-panel";
 
 type Mode = "create" | "edit" | "clone";
 
@@ -20,6 +23,10 @@ interface DialogOptions {
   cloneFrom?: WorkspaceInfo;
   /** Optional prefill for create mode (e.g. when launching from a Project sub-dir) */
   prefill?: WorkspacePrefill;
+  /** Project the created workspace joins (create mode): the sidebar tree's
+   *  "Add Repository…" opens this dialog, and the repo is only really *in* the
+   *  project once it is a member. */
+  addToProject?: number | null;
 }
 
 export function showWorkspaceDialog(opts: DialogOptions) {
@@ -34,10 +41,10 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   const prefill = cloneFrom || editWs;
   const title =
     mode === "create"
-      ? "New Workspace"
+      ? "Add Repository"
       : mode === "edit"
-        ? "Edit Workspace"
-        : "Clone Workspace";
+        ? "Edit Checkout"
+        : "Clone Repository";
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop workspace-backdrop";
@@ -89,10 +96,6 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           <input class="ui-input" id="ws-desc" placeholder="Brief description" value="${escapeAttr(prefill?.description ?? "")}" />
         </div>
         <div class="dialog-field">
-          <label class="dialog-label">Kanban Path</label>
-          <input class="ui-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
-        </div>
-        <div class="dialog-field">
           <label class="dialog-label">Prompt</label>
           <textarea class="ui-input" id="ws-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(prefill?.prompt ?? "")}</textarea>
         </div>
@@ -108,9 +111,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
 
   // Attach native folder pickers to path inputs
   const dirInput = backdrop.querySelector<HTMLInputElement>("#ws-dir");
-  if (dirInput) attachPathPicker(dirInput, { title: "Select workspace directory" });
-  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
-  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+  if (dirInput) attachPathPicker(dirInput, { title: "Select the repository folder" });
   const cloneDestInput = backdrop.querySelector<HTMLInputElement>("#ws-clone-dest");
   if (cloneDestInput) {
     attachPathPicker(cloneDestInput, { title: "Select clone destination" });
@@ -177,18 +178,20 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     if (mode === "edit" && editIndex !== undefined) {
       await submitEdit(backdrop, editIndex);
     } else {
-      await submitCreate(backdrop, sourceDropdown?.value ?? "local");
+      await submitCreate(backdrop, sourceDropdown?.value ?? "local", opts.addToProject ?? null);
     }
   });
 }
 
-async function submitCreate(backdrop: HTMLElement, source: string) {
+async function submitCreate(
+  backdrop: HTMLElement,
+  source: string,
+  addToProject: number | null,
+) {
   const name =
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim() ?? "";
-  const kanban =
-    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim() ?? "";
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim() ??
     "";
@@ -222,10 +225,10 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
         prompt,
         url,
         destinationDir,
-        kanban || null,
       );
       appState.addWorkspace(info);
-      toast(`Workspace "${info.name}" cloned`, "success");
+      await joinProject(addToProject, info.path);
+      toast(`Cloned "${info.name}"`, "success");
       backdrop.remove();
     } catch (err) {
       toast(`Failed to clone: ${err}`, "error");
@@ -244,7 +247,7 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
   }
   const finalName = name || basenameFromPath(dir);
   if (!finalName) {
-    toast("Could not derive workspace name from folder", "error");
+    toast("Could not derive a name from the folder", "error");
     return;
   }
   btn.disabled = true;
@@ -257,16 +260,27 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
       prompt,
       dir,
       "Simple",
-      kanban || null,
     );
     appState.addWorkspace(info);
-    toast(`Workspace "${info.name}" created`, "success");
+    await joinProject(addToProject, info.path);
+    toast(`Added "${info.name}"`, "success");
     backdrop.remove();
   } catch (err) {
-    toast(`Failed to create workspace: ${err}`, "error");
+    toast(`Failed to add it: ${err}`, "error");
     btn.disabled = false;
     btn.textContent = "Create";
   }
+}
+
+/** Make the freshly created checkout a member of the project the dialog was
+ *  opened from (`addToProject`). A no-op for every other creation path — the
+ *  checkout then shows up as a loose repository at the top level, where it can
+ *  be put into a project later. */
+async function joinProject(projectId: number | null, path: string) {
+  if (projectId === null) return;
+  const project = projectById(projectId);
+  if (!project) return;
+  await setProjectMembership(project, path, true);
 }
 
 /** Mirrors `piki_core::workspace::manager::parse_github_repo_name`. Extracts
@@ -285,8 +299,6 @@ function basenameFromPath(path: string): string {
 async function submitEdit(backdrop: HTMLElement, index: number) {
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim();
-  const kanban =
-    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim();
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim();
 
@@ -295,16 +307,14 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
   btn.textContent = "Saving...";
 
   try {
-    await ipc.updateWorkspace(index, prompt, desc, kanban);
+    await ipc.updateWorkspace(index, prompt, desc);
     // Update local state
     const ws = appState.workspaces[index];
     if (ws) {
       if (prompt !== undefined) ws.info.prompt = prompt;
       if (desc !== undefined) ws.info.description = desc;
-      if (kanban !== undefined)
-        ws.info.kanban_path = kanban === "" ? null : kanban;
     }
-    toast("Workspace updated", "success");
+    toast("Checkout updated", "success");
     backdrop.remove();
   } catch (err) {
     toast(`Failed to update: ${err}`, "error");
@@ -325,7 +335,7 @@ export function showWorkspaceInfo(index: number) {
   backdrop.innerHTML = `
     <div class="dialog ui-surface" style="max-width:500px">
       <div class="ui-header">
-        <span class="ui-header-title">Workspace Info</span>
+        <span class="ui-header-title">Checkout Info</span>
         <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
@@ -334,7 +344,6 @@ export function showWorkspaceInfo(index: number) {
         ${infoRow("Branch", ws.branch ?? "—")}
         ${infoRow("Path", String(info.path))}
         ${infoRow("Source Repo", info.source_repo_display)}
-        ${infoRow("Kanban Path", info.kanban_path || "—")}
         ${infoRow("Description", info.description || "—")}
         ${infoRow("Prompt", info.prompt || "—")}
       </div>
@@ -378,14 +387,26 @@ function escapeAttr(text: string): string {
   return (text ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
-/** Layer 3: GitHub-only "Create Worktree" dialog. Spawns a worktree
- *  workspace anchored at the parent's source_repo. Only the branch name is
- *  required; prompt/kanban default to the parent's values. */
-export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
+/** Layer 3: GitHub-only "Create Worktree" dialog. Two sources for a new
+ *  worktree workspace anchored at the parent's source_repo, picked with the
+ *  dropdown at the top (mirrors the TUI's `prefix r` flow):
+ *  - **Create New** — only the branch name is required; `git worktree add`
+ *    runs under the hood, prompt defaults to the parent's value.
+ *  - **Load Existing** — lists worktrees already on disk for this repo
+ *    (`git worktree list`, filtered to ones with no workspace yet) and
+ *    registers the picked one without touching git. */
+/** `addToProject`: the project the tree row was in. A branch created from
+ *  inside a project joins it — membership is never inferred from a shared
+ *  repository (see `piki_core::projects::tree`), so this is the one place that
+ *  spares the user the bookkeeping. */
+export function showCreateWorktreeDialog(
+  parent: WorkspaceInfo,
+  addToProject: number | null = null,
+) {
   document.querySelector(".workspace-backdrop")?.remove();
 
   if (parent.origin?.kind !== "GitHub") {
-    toast("Create Worktree is available only for GitHub workspaces", "error");
+    toast("New Branch is available only for GitHub repositories", "error");
     return;
   }
 
@@ -403,16 +424,26 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
           <input class="ui-input" value="${escapeAttr(parent.source_repo_display || parent.name)}" disabled />
         </div>
         <div class="dialog-field">
-          <label class="dialog-label">Branch name</label>
-          <input class="ui-input" id="wt-name" placeholder="feature/my-branch" />
+          <span class="dialog-label">Source</span>
+          <div id="wt-mode-slot"></div>
         </div>
-        <div class="dialog-field">
-          <label class="dialog-label">Prompt</label>
-          <textarea class="ui-input" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
+        <div id="wt-new-fields">
+          <div class="dialog-field">
+            <label class="dialog-label">Branch name</label>
+            <input class="ui-input" id="wt-name" placeholder="feature/my-branch" />
+          </div>
+          <div class="dialog-field">
+            <label class="dialog-label">Prompt</label>
+            <textarea class="ui-input" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
+          </div>
         </div>
-        <div class="dialog-field">
-          <label class="dialog-label">Kanban Path</label>
-          <input class="ui-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
+        <div id="wt-existing-fields" style="display:none">
+          <div class="dialog-field">
+            <span class="dialog-label">Existing worktrees</span>
+            <div class="wt-existing-picker" id="wt-existing-list">
+              <span class="project-picker-hint">Loading…</span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="dialog-footer">
@@ -424,8 +455,71 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
 
   document.body.appendChild(backdrop);
 
-  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#wt-kanban");
-  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+  const dialog = backdrop.querySelector<HTMLElement>(".dialog")!;
+  const newFields = backdrop.querySelector<HTMLElement>("#wt-new-fields")!;
+  const existingFields = backdrop.querySelector<HTMLElement>("#wt-existing-fields")!;
+  const existingListEl = backdrop.querySelector<HTMLElement>("#wt-existing-list")!;
+  const submitBtn = backdrop.querySelector<HTMLButtonElement>("#wt-submit")!;
+
+  let selectedExisting: ExistingWorktreeInfo | null = null;
+  let existingLoaded = false;
+
+  function renderExistingRow(w: ExistingWorktreeInfo): HTMLElement {
+    const label = document.createElement("label");
+    label.className = "wt-existing-row";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "wt-existing";
+    radio.addEventListener("change", () => {
+      selectedExisting = w;
+    });
+    label.appendChild(radio);
+    const branch = document.createElement("span");
+    branch.className = "wt-existing-branch";
+    branch.textContent = w.branch;
+    label.appendChild(branch);
+    const path = document.createElement("span");
+    path.className = "wt-existing-path";
+    path.textContent = w.path;
+    label.appendChild(path);
+    label.title = w.path;
+    return label;
+  }
+
+  async function loadExisting() {
+    if (existingLoaded) return;
+    existingLoaded = true;
+    try {
+      const found = await ipc.listWorktrees(parent.source_repo);
+      existingListEl.innerHTML = "";
+      if (found.length === 0) {
+        existingListEl.innerHTML = `<span class="project-picker-hint">No unregistered worktrees found for this repo.</span>`;
+        return;
+      }
+      for (const w of found) existingListEl.appendChild(renderExistingRow(w));
+    } catch (err) {
+      existingLoaded = false;
+      existingListEl.innerHTML = `<span class="project-picker-hint">Failed to load: ${escapeHtml(String(err))}</span>`;
+    }
+  }
+
+  const modeDropdown = createDropdown(
+    [
+      { value: "new", label: "Create New" },
+      { value: "existing", label: "Load Existing" },
+    ],
+    "new",
+  );
+  backdrop.querySelector("#wt-mode-slot")!.replaceWith(modeDropdown.container);
+  modeDropdown.container.addEventListener("change", () => {
+    const isExisting = modeDropdown.value === "existing";
+    newFields.style.display = isExisting ? "none" : "";
+    existingFields.style.display = isExisting ? "" : "none";
+    submitBtn.textContent = isExisting ? "Import" : "Create";
+    if (isExisting) void loadExisting();
+  });
+
+  attachDialogResize(dialog, "create-worktree");
   backdrop.querySelector<HTMLInputElement>("#wt-name")?.focus();
 
   const close = () => backdrop.remove();
@@ -439,22 +533,44 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
   });
   backdrop.setAttribute("tabindex", "0");
 
-  backdrop.querySelector("#wt-submit")!.addEventListener("click", async () => {
+  submitBtn.addEventListener("click", async () => {
+    if (modeDropdown.value === "existing") {
+      if (!selectedExisting) {
+        toast("Pick a worktree to load", "error");
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Importing...";
+      try {
+        const info = await ipc.importExistingWorktree(
+          parent.source_repo,
+          selectedExisting.path,
+          selectedExisting.branch,
+        );
+        appState.addWorkspace(info);
+        await joinProject(addToProject, info.path);
+        toast(`Loaded branch "${info.name}"`, "success");
+        backdrop.remove();
+      } catch (err) {
+        toast(`Failed to load the branch: ${err}`, "error");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Import";
+      }
+      return;
+    }
+
     const name =
       backdrop.querySelector<HTMLInputElement>("#wt-name")?.value.trim() ?? "";
     const prompt =
       backdrop.querySelector<HTMLTextAreaElement>("#wt-prompt")?.value.trim() ?? "";
-    const kanban =
-      backdrop.querySelector<HTMLInputElement>("#wt-kanban")?.value.trim() ?? "";
 
     if (!name) {
       toast("Branch name is required", "error");
       return;
     }
 
-    const btn = backdrop.querySelector<HTMLButtonElement>("#wt-submit")!;
-    btn.disabled = true;
-    btn.textContent = "Creating...";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Creating...";
     try {
       const info = await ipc.createWorkspace(
         name,
@@ -462,15 +578,15 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
         prompt,
         parent.source_repo,
         "Worktree",
-        kanban || null,
       );
       appState.addWorkspace(info);
-      toast(`Worktree "${info.name}" created`, "success");
+      await joinProject(addToProject, info.path);
+      toast(`Created branch "${info.name}"`, "success");
       backdrop.remove();
     } catch (err) {
-      toast(`Failed to create worktree: ${err}`, "error");
-      btn.disabled = false;
-      btn.textContent = "Create";
+      toast(`Failed to create the branch: ${err}`, "error");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Create";
     }
   });
 }

@@ -7,6 +7,7 @@ if [ "$(uname -s)" != "Linux" ]; then
 fi
 
 BINARY_NAME="piki-desktop"
+CTL_BINARY_NAME="piki-ctl"
 APP_NAME="Piki Desktop"
 APP_ID="com.piki.desktop"
 DEFAULT_DEST="$HOME/.local/bin"
@@ -49,19 +50,29 @@ cd "$FRONTEND_DIR"
 npm install --silent
 cd "$DESKTOP_DIR"
 
-# Step 2: Build release binary via cargo tauri build
+# Step 2: Build release binaries via cargo tauri build + cargo build
 echo "Building $BINARY_NAME in release mode..."
 cargo tauri build --no-bundle
 
-# Step 3: Install binary (atomic replace — the session daemon may still be
-# running this file as `--serve-sessions`, so an in-place `cp` would fail with
-# ETXTBSY. Rename swaps in a fresh inode without disturbing the running daemon.)
+echo "Building $CTL_BINARY_NAME in release mode..."
+cargo build --release -p piki-ctl
+
+# Step 3: Install binaries (atomic replace — the session daemon may still be
+# running $BINARY_NAME as `--serve-sessions`, so an in-place `cp` would fail
+# with ETXTBSY. Rename swaps in a fresh inode without disturbing the running
+# daemon. $CTL_BINARY_NAME has no such daemon but is installed the same way
+# for consistency.)
 mkdir -p "$DEST_DIR"
-TMP_BIN="$DEST_DIR/.$BINARY_NAME.new.$$"
-cp "$PROJECT_ROOT/target/release/$BINARY_NAME" "$TMP_BIN"
-chmod +x "$TMP_BIN"
-mv -f "$TMP_BIN" "$DEST_DIR/$BINARY_NAME"
-echo "Installed binary to $DEST_DIR/$BINARY_NAME"
+install_binary() {
+    local name="$1"
+    local tmp="$DEST_DIR/.$name.new.$$"
+    cp "$PROJECT_ROOT/target/release/$name" "$tmp"
+    chmod +x "$tmp"
+    mv -f "$tmp" "$DEST_DIR/$name"
+    echo "Installed $name to $DEST_DIR/$name"
+}
+install_binary "$BINARY_NAME"
+install_binary "$CTL_BINARY_NAME"
 
 # Check if destination is in PATH
 case ":$PATH:" in
@@ -138,3 +149,5 @@ echo "Done! $APP_NAME is now installed."
 echo "  Binary:  $DEST_DIR/$BINARY_NAME"
 echo "  Desktop: $APPLICATIONS_DIR/$APP_ID.desktop"
 echo "  Run:     $BINARY_NAME"
+echo "  Also installed $DEST_DIR/$CTL_BINARY_NAME — any coding agent in a tab"
+echo "  can run '$CTL_BINARY_NAME open file <path>' to open a file in the app."

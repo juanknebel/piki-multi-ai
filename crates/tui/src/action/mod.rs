@@ -19,28 +19,13 @@ mod workspace;
 /// Async actions triggered by key events
 #[derive(Debug)]
 pub(crate) enum Action {
-    CreateWorkspace(
-        String,
-        String,
-        String,
-        Option<String>,
-        PathBuf,
-        WorkspaceType,
-    ),
+    CreateWorkspace(String, String, String, PathBuf, WorkspaceType),
     /// Clone a GitHub URL into a user-chosen destination directory and
     /// register as Simple. Args:
-    /// (name, description, prompt, kanban_path, github_url, destination_dir)
-    CreateGithubWorkspace(
-        String,
-        String,
-        String,
-        Option<String>,
-        String,
-        std::path::PathBuf,
-    ),
-    EditWorkspace(usize, Option<String>, String),
-    /// Second field: optional target kanban column for dispatched cards
-    DeleteWorkspace(usize, Option<String>),
+    /// (name, description, prompt, github_url, destination_dir)
+    CreateGithubWorkspace(String, String, String, String, std::path::PathBuf),
+    EditWorkspace(usize, String),
+    DeleteWorkspace(usize),
     /// Scan disk (via `git worktree list`) for worktrees of the parent
     /// workspace's repo that aren't already registered, for the
     /// CreateWorktree dialog's "Load existing worktree" flow.
@@ -59,6 +44,9 @@ pub(crate) enum Action {
     OpenEditorAt(PathBuf, u32),
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
+    /// Re-spawn the exited process of the tab at this index, in place: same
+    /// provider, same slot in the tab bar, same custom title.
+    RestartTab(usize),
     /// Show the global scratch-terminal overlay, spawning its shell on the
     /// first use. Toggling it off (or on, once spawned) is handled inline in
     /// `app_actions::toggle_scratch_terminal` and needs no async work.
@@ -93,19 +81,16 @@ pub(crate) enum Action {
     RetryReviewCheckout(usize),
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
-    /// Dispatch an agent to work on a kanban card
-    DispatchAgent {
-        source_ws: usize,
-        card_id: String,
-        card_title: String,
-        card_description: String,
-        card_priority: flow_core::Priority,
-        card_project: String,
-        provider: AIProvider,
-        agent_name: Option<String>,
-        agent_role: Option<String>,
-        additional_prompt: String,
-        use_current_ws: bool,
+    /// Run a jq filter over the API tab's response bodies. An empty filter
+    /// drops the current one and shows the raw responses again.
+    RunJqFilter(String),
+    /// Write one input line to several agent tabs at once. Each target is a
+    /// (workspace, tab) pair; the text (+ Enter when `append_enter` is set)
+    /// is written to each tab's PTY verbatim.
+    BroadcastInput {
+        targets: Vec<(usize, usize)>,
+        text: String,
+        append_enter: bool,
     },
     /// Save an agent profile to storage
     SaveAgent {
@@ -144,6 +129,14 @@ pub(crate) enum Action {
     ProjectAdoptDirectory {
         path: std::path::PathBuf,
     },
+    /// Record the user's decision on each listed skill id for this
+    /// workspace's `source_repo`, then resync the injected AGENTS.md block
+    /// from the full accepted set (see `piki_core::repo_skills`).
+    RespondToSkillOffers {
+        workspace_idx: usize,
+        accepted: Vec<&'static str>,
+        declined: Vec<&'static str>,
+    },
 }
 
 pub(crate) async fn execute_action(
@@ -159,7 +152,8 @@ pub(crate) async fn execute_action(
         | Action::DeleteWorkspace(..)
         | Action::RemoveFromList(..)
         | Action::ListWorktrees(..)
-        | Action::ImportExistingWorktree { .. } => {
+        | Action::ImportExistingWorktree { .. }
+        | Action::RespondToSkillOffers { .. } => {
             workspace::handle(app, manager, action, terminal).await?
         }
         Action::OpenEditor(..) | Action::OpenEditorAt(..) => {
@@ -173,11 +167,14 @@ pub(crate) async fn execute_action(
         | Action::LoadRepoPrs(..)
         | Action::RetryReviewCheckout(..) => review::handle(app, manager, action, terminal).await?,
         Action::SpawnTab(..)
+        | Action::RestartTab(..)
         | Action::OpenMarkdown(..)
         | Action::OpenMdr(..)
         | Action::ShowScratchTerminal => tabs::handle(app, manager, action, terminal).await?,
-        Action::SendApiRequest(..) => api::handle(app, manager, action, terminal).await?,
-        Action::DispatchAgent { .. }
+        Action::SendApiRequest(..) | Action::RunJqFilter(..) => {
+            api::handle(app, manager, action, terminal).await?
+        }
+        Action::BroadcastInput { .. }
         | Action::SaveAgent { .. }
         | Action::DeleteAgent(..)
         | Action::SyncAgentToRepo(..)

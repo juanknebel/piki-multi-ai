@@ -1,274 +1,41 @@
 use ratatui::DefaultTerminal;
 
 use super::Action;
-use crate::app::{self, App, AppMode, ToastLevel};
+use crate::app::{App, AppMode, ToastLevel};
 use crate::dialog_state::DialogState;
-use crate::helpers::spawn_tab;
 use piki_core::AIProvider;
-use piki_core::workspace::{FileWatcher, WorkspaceManager};
+use piki_core::workspace::WorkspaceManager;
 
 pub(super) async fn handle(
     app: &mut App,
-    manager: &WorkspaceManager,
+    _manager: &WorkspaceManager,
     action: Action,
     _terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::DispatchAgent {
-            source_ws,
-            card_id,
-            card_title,
-            card_description,
-            card_priority,
-            card_project,
-            provider,
-            agent_name,
-            agent_role,
-            additional_prompt,
-            use_current_ws,
+        Action::BroadcastInput {
+            targets,
+            text,
+            append_enter,
         } => {
-            // 1. Extract source workspace data
-            let source_dir = match app.workspaces.get(source_ws) {
-                Some(ws) => ws.source_repo.clone(),
-                None => {
-                    app.set_toast("Source workspace not found", crate::app::ToastLevel::Info);
-                    return Ok(());
-                }
-            };
-            let kanban_path = app
-                .workspaces
-                .get(source_ws)
-                .and_then(|ws| ws.kanban_path.clone());
-
-            // 2. Compose task prompt: always include card title so the agent starts working
-            let task_prompt = if let Some(ref name) = agent_name {
-                let mut parts = vec![format!(
-                    "Use the {} agent to plan and then implement the task: {}",
-                    name, card_title
-                )];
-                if !card_description.is_empty() {
-                    parts.push(card_description.clone());
-                }
-                if !additional_prompt.trim().is_empty() {
-                    parts.push(additional_prompt.trim().to_string());
-                }
-                parts.join("\n\n")
-            } else {
-                let mut parts = vec![card_title.clone()];
-                if !card_description.is_empty() {
-                    parts.push(card_description.clone());
-                }
-                if !additional_prompt.trim().is_empty() {
-                    parts.push(additional_prompt.trim().to_string());
-                }
-                parts.join("\n\n")
-            };
-
-            if use_current_ws {
-                // Use current workspace — just spawn a new tab, no worktree
-                // Update kanban card
-                let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
-                let mut kanban_err: Option<String> = None;
-                if let Some(src_ws) = app.workspaces.get_mut(source_ws)
-                    && let Some(ref mut kp) = src_ws.kanban_provider
-                {
-                    if let Err(e) = kp.update_card(
-                        &card_id,
-                        &card_title,
-                        &card_description,
-                        card_priority,
-                        assignee_label,
-                        &card_project,
-                    ) {
-                        kanban_err = Some(e.to_string());
-                    }
-                    if let Err(e) = kp.move_card(&card_id, "in_progress") {
-                        kanban_err = Some(e.to_string());
-                    }
-                    if let Some(ref mut ka) = src_ws.kanban_app
-                        && let Ok(board) = kp.load_board()
-                    {
-                        ka.board = board;
-                        ka.clamp();
-                    }
-                }
-                if let Some(e) = kanban_err {
-                    app.set_toast(
-                        format!("Kanban card sync failed: {e}"),
-                        crate::app::ToastLevel::Error,
-                    );
-                }
-
-                // Spawn tab in current workspace
-                let ws = &mut app.workspaces[source_ws];
-                let (idx, spawn_error) = spawn_tab(
-                    ws,
-                    &provider,
-                    app.pty_rows,
-                    app.pty_cols,
-                    Some(&task_prompt),
-                    Some(&app.provider_manager),
-                    &app.paths,
-                    app.session_daemon.clone(),
-                    app.pty_output.clone(),
-                )
-                .await;
-                ws.active_tab = idx;
-                app.active_pane = crate::app::ActivePane::MainPanel;
-
-                match spawn_error {
-                    Some(err) => app.set_toast(err, ToastLevel::Error),
-                    None => app.set_toast(
-                        format!("Task started: {} via {}", card_title, provider.label()),
-                        ToastLevel::Success,
-                    ),
-                }
-            } else {
-                // Create new worktree workspace (original flow)
-                // Build branch name: <type>/<sanitized_card_id>
-                let type_prefix = match card_priority {
-                    flow_core::Priority::Bug => "bug",
-                    flow_core::Priority::Wishlist => "spike",
-                    _ => "feature",
-                };
-                let sanitized_id: String = card_id
-                    .chars()
-                    .map(|c| {
-                        if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                            c
-                        } else {
-                            '-'
-                        }
-                    })
-                    .collect();
-                let ws_name = format!("{}/{}", type_prefix, sanitized_id);
-
-                let result = manager
-                    .create(
-                        &ws_name,
-                        &card_title,
-                        &task_prompt,
-                        kanban_path.clone(),
-                        &source_dir,
-                    )
-                    .await;
-
-                match result {
-                    Ok(mut info) => {
-                        info.dispatch_card_id = Some(card_id.clone());
-                        info.dispatch_source_kanban = kanban_path;
-                        info.dispatch_agent_name = agent_name.clone();
-                        info.order = app
-                            .workspaces
-                            .iter()
-                            .map(|w| w.info.order)
-                            .max()
-                            .map(|m| m + 1)
-                            .unwrap_or(0);
-
-                        // Materialize agent config files in worktree
-                        if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                            let _ = materialize_agent_config(
-                                &info.path,
-                                name,
-                                &provider,
-                                role,
-                                Some(&app.provider_manager),
-                            );
-                        }
-
-                        // Update kanban card: set assignee and move to IN PROGRESS
-                        let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
-                        let mut kanban_err: Option<String> = None;
-                        if let Some(src_ws) = app.workspaces.get_mut(source_ws)
-                            && let Some(ref mut kp) = src_ws.kanban_provider
-                        {
-                            if let Err(e) = kp.update_card(
-                                &card_id,
-                                &card_title,
-                                &card_description,
-                                card_priority,
-                                assignee_label,
-                                &card_project,
-                            ) {
-                                kanban_err = Some(e.to_string());
-                            }
-                            if let Err(e) = kp.move_card(&card_id, "in_progress") {
-                                kanban_err = Some(e.to_string());
-                            }
-                            if let Some(ref mut ka) = src_ws.kanban_app
-                                && let Ok(board) = kp.load_board()
-                            {
-                                ka.board = board;
-                                ka.clamp();
-                            }
-                        }
-                        if let Some(e) = kanban_err {
-                            app.set_toast(
-                                format!("Kanban card sync failed: {e}"),
-                                crate::app::ToastLevel::Error,
-                            );
-                        }
-
-                        // Create workspace and switch to it
-                        app.workspaces.push(app::Workspace::from_info(info));
-                        let new_idx = app.workspaces.len() - 1;
-                        app.switch_workspace_and_focus(new_idx);
-
-                        // Start file watcher
-                        let ws = &mut app.workspaces[new_idx];
-                        match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
-                            Ok(watcher) => ws.watcher = Some(watcher),
-                            Err(e) => {
-                                app.set_toast(
-                                    format!("Watcher error: {}", e),
-                                    crate::app::ToastLevel::Error,
-                                );
-                            }
-                        }
-
-                        // Spawn AI provider tab with task prompt
-                        let ws = &mut app.workspaces[new_idx];
-                        let (idx, spawn_error) = spawn_tab(
-                            ws,
-                            &provider,
-                            app.pty_rows,
-                            app.pty_cols,
-                            Some(&task_prompt),
-                            Some(&app.provider_manager),
-                            &app.paths,
-                            app.session_daemon.clone(),
-                            app.pty_output.clone(),
-                        )
-                        .await;
-                        ws.active_tab = idx;
-
-                        // Persist config async
-                        {
-                            let source = app.workspaces[new_idx].source_repo.clone();
-                            crate::helpers::persist_workspaces(app, source);
-                        }
-
-                        match spawn_error {
-                            Some(err) => app.set_toast(err, ToastLevel::Error),
-                            None => app.set_toast(
-                                format!(
-                                    "Agent dispatched: {} via {}",
-                                    card_title,
-                                    provider.label()
-                                ),
-                                ToastLevel::Success,
-                            ),
-                        }
-                    }
-                    Err(e) => {
-                        app.set_toast(
-                            format!("Dispatch failed: {}", e),
-                            crate::app::ToastLevel::Error,
-                        );
-                    }
+            let mut payload = text.into_bytes();
+            if append_enter {
+                payload.push(b'\n');
+            }
+            let mut done = 0;
+            for (ws_idx, tab_idx) in targets {
+                let wrote = app
+                    .workspaces
+                    .get_mut(ws_idx)
+                    .and_then(|ws| ws.tabs.get_mut(tab_idx))
+                    .and_then(|tab| tab.pty_session.as_mut())
+                    .map(|pty| pty.write(&payload).is_ok())
+                    .unwrap_or(false);
+                if wrote {
+                    done += 1;
                 }
             }
+            app.set_toast(format!("Broadcast to {done} agent(s)"), ToastLevel::Success);
         }
         Action::SaveAgent {
             source_repo,
@@ -348,14 +115,18 @@ pub(super) async fn handle(
         }
         Action::ScanRepoAgents => {
             if let Some(ws) = app.current_workspace() {
-                let source_repo = ws.source_repo.clone();
+                // The checkout the user is in, not its `source_repo`: a
+                // worktree is its own working tree, and an agent file written
+                // (or not yet committed) there is absent from the parent's.
+                // The profiles it is compared against stay keyed by the repo.
+                let ws_path = ws.path.clone();
 
                 // Directory list, provider attribution and the
                 // already-imported check all live in core so the desktop
                 // applies the identical rules (see core::agent_scan).
                 let discovered: Vec<(String, String, String, bool)> =
                     piki_core::agent_scan::scan_repo_agents(
-                        &source_repo,
+                        &ws_path,
                         &app.provider_manager,
                         &app.agent_profiles,
                     )
@@ -434,12 +205,16 @@ fn materialize_agent_config(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> anyhow::Result<()> {
     let filename = format!("{}.md", agent_name);
+    // `agent_dir_for` falls back to the CLI's conventional directory when the
+    // provider has none configured — Codex, Muse and Antigravity all ship
+    // that way, and used to write nothing at all here while still reporting
+    // a successful sync.
     let dir = if let AIProvider::Custom(name) = provider
         && let Some(mgr) = provider_manager
         && let Some(config) = mgr.get(name)
-        && let Some(agent_dir) = &config.agent_dir
+        && let Some(agent_dir) = piki_core::agent_scan::agent_dir_for(config)
     {
-        agent_dir.clone()
+        agent_dir
     } else {
         return Ok(());
     };

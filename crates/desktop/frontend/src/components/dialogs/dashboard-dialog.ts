@@ -126,7 +126,7 @@ export function showDashboard() {
         const detail = await ipc.switchWorkspace(idx);
         appState.setActiveWorkspace(idx, detail);
       } catch (err) {
-        reportError("Workspace switch failed", err);
+        reportError("Switch failed", err);
       }
     });
   });

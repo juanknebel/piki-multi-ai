@@ -11,6 +11,7 @@ import { pullWorkspace, pushWorkspace } from "./git-actions";
 import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
+import { cycleWorkspace, toggleLastWorkspace } from "./workspace-actions";
 import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
@@ -60,6 +61,9 @@ interface MenuDefinition {
 
 const noWs = () => !appState.activeWs;
 
+/** Checkout-to-checkout navigation needs at least two of them. */
+const oneWs = () => appState.workspaces.length < 2;
+
 const spawnTab = (provider: AIProvider) => void openProvider(provider);
 
 const SEP: MenuItem = { label: "", separator: true };
@@ -75,7 +79,7 @@ const MENUS: MenuDefinition[] = [
   {
     label: "File",
     items: () => [
-      { label: "New Workspace", shortcut: getShortcutKey("new-workspace"), action: () => showWorkspaceDialog({ mode: "create" }) },
+      { label: "Add Repository…", shortcut: getShortcutKey("new-workspace"), action: () => showWorkspaceDialog({ mode: "create" }) },
       {
         label: "New Tab",
         disabled: noWs,
@@ -84,7 +88,6 @@ const MENUS: MenuDefinition[] = [
             (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
           ),
           { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => spawnTab("WebPreview") },
-          { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => spawnTab("Kanban") },
         ],
       },
       SEP,
@@ -102,7 +105,7 @@ const MENUS: MenuDefinition[] = [
         action: () => closeActiveWsTab(),
       },
       {
-        label: "Move Tab to Workspace…",
+        label: "Move Tab to Checkout…",
         disabled: () => {
           const ws = appState.activeWs;
           return !ws || ws.wsTabs.length === 0 || appState.workspaces.length < 2;
@@ -175,7 +178,6 @@ const MENUS: MenuDefinition[] = [
   {
     label: "View",
     items: () => [
-      { label: "Workspaces", action: () => appState.setActiveView("workspaces") },
       { label: "Projects", action: () => appState.setActiveView("projects") },
       { label: "Files", action: () => appState.setActiveView("files") },
       {
@@ -198,7 +200,6 @@ const MENUS: MenuDefinition[] = [
       },
       { label: "Auto-reveal Active File", action: () => toggleFileTreeAutoReveal() },
       { label: "Source Control", action: () => appState.setActiveView("git") },
-      { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
       { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
       { label: "Toggle Terminal", shortcut: getShortcutKey("toggle-terminal"), action: () => void toggleDropdownTerminal() },
@@ -208,7 +209,10 @@ const MENUS: MenuDefinition[] = [
       { label: "Reset Zoom", shortcut: getShortcutKey("zoom-reset"), action: () => resetZoom() },
       SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
-      { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
+      { label: "Switch Checkout…", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
+      { label: "Next Checkout", shortcut: getShortcutKey("workspace-next"), disabled: oneWs, action: () => void cycleWorkspace(1) },
+      { label: "Previous Checkout", shortcut: getShortcutKey("workspace-prev"), disabled: oneWs, action: () => void cycleWorkspace(-1) },
+      { label: "Toggle Last Checkout", shortcut: getShortcutKey("workspace-last"), disabled: oneWs, action: () => void toggleLastWorkspace() },
       { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
       { label: "System Info", shortcut: getShortcutKey("system-info"), action: () => showSysinfoDialog() },
       { label: "Application Logs", shortcut: getShortcutKey("logs"), action: () => showLogsDialog() },

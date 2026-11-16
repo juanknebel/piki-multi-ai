@@ -227,6 +227,98 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Projects become the ONE sidebar unit (`projects::tree`), so every
+        // workspace has to be reachable through one. Two parts:
+        //
+        // `project_members.kind` distinguishes an explicit repository-root
+        // member (`'repo'`, renders a single repo row even with no checkout
+        // loaded) from the dynamically-resolved default (`'auto'`).
+        //
+        // This migration also used to seed one project per `source_repo`. That
+        // was a mistake twice over — it did nothing when any hand-made project
+        // existed, and where it did run it produced projects whose name only
+        // repeated their single repository's. Loose repositories render at the
+        // top level now, so nothing needs seeding; v14 removes what the old
+        // code created.
+        if version < 12 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE project_members
+                     ADD COLUMN kind TEXT NOT NULL DEFAULT 'auto';",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (12)", [])?;
+            tx.commit()?;
+        }
+
+        // v13 re-ran the per-repository seeding v12 had skipped. Both are
+        // undone below; the version is still recorded so a database that
+        // stopped there is recognizable.
+        if version < 13 {
+            let tx = conn.transaction()?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (13)", [])?;
+            tx.commit()?;
+        }
+
+        // Loose repositories render at the top level, so the one-repository
+        // projects v12/v13 created are noise: their name only repeated the
+        // single repository under them. Remove exactly that shape.
+        if version < 14 {
+            let tx = conn.transaction()?;
+            let removed = drop_single_repo_projects(&tx)?;
+            if removed > 0 {
+                tracing::info!(
+                    projects = removed,
+                    "removed one-repository projects left by the v12/v13 seeding (schema v14)"
+                );
+            }
+            tx.execute("INSERT INTO schema_version (version) VALUES (14)", [])?;
+            tx.commit()?;
+        }
+
+        // A per-workspace board-path setting existed briefly; it was
+        // removed again. Drop the column.
+        if version < 15 {
+            let tx = conn.transaction()?;
+            tx.execute_batch("ALTER TABLE workspaces DROP COLUMN kanban_path;")?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (15)", [])?;
+            tx.commit()?;
+        }
+
+        // The task board is gone entirely, so the dispatch-from-card
+        // bookkeeping goes with it. Drop the columns.
+        if version < 16 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces DROP COLUMN dispatch_card_id;
+                 ALTER TABLE workspaces DROP COLUMN dispatch_source_kanban;
+                 ALTER TABLE workspaces DROP COLUMN dispatch_agent_name;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (16)", [])?;
+            tx.commit()?;
+        }
+
+        // Per-repo adoption state for piki's agent-skills injection
+        // (AGENTS.md block offering piki-ctl etc. to a repo's coding
+        // agents — see `crate::repo_skills`). Tracks whether a given skill
+        // was offered/accepted/declined for a `source_repo`, and at which
+        // skill version, so a later skill-content change can be re-offered
+        // without re-prompting for ones the user already decided on.
+        if version < 17 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS repo_skill_offers (
+                    source_repo   TEXT NOT NULL,
+                    skill_id      TEXT NOT NULL,
+                    skill_version INTEGER NOT NULL,
+                    status        TEXT NOT NULL,
+                    updated_at    TEXT NOT NULL,
+                    PRIMARY KEY (source_repo, skill_id)
+                );",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (17)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -240,20 +332,16 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
                     entry.description,
                     entry.prompt,
-                    entry.kanban_path,
                     entry.worktree_path.to_string_lossy(),
                     entry.source_repo.to_string_lossy(),
                     workspace_type_str(entry.workspace_type),
                     entry.order,
-                    entry.dispatch_card_id,
-                    entry.dispatch_source_kanban,
-                    entry.dispatch_agent_name,
                     entry.origin.tag(),
                     entry.origin.github_url(),
                     entry.is_git_repo,
@@ -331,6 +419,85 @@ CREATE TABLE IF NOT EXISTS collapsed_groups (group_name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS ui_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ";
 
+/// Remove the one-repository projects the v12/v13 seeding created.
+///
+/// Those migrations wrapped every repository in a project of its own so the
+/// new tree would open on what the old flat workspace list showed. In practice
+/// that produced a header whose name only repeated the single repository under
+/// it — the same duplication the hoisting rule removes one level down. A
+/// repository you have not grouped with anything renders at the top level now,
+/// so the wrapper is pure noise.
+///
+/// Only the exact shape the seeder produced is removed: a project whose
+/// members are all checkouts of ONE repository, which are ALL of that
+/// repository's loaded checkouts, and whose name is that repository's folder
+/// name. A project that matches all three renders identically without it, so
+/// nothing is lost either way — but a hand-made project that groups two repos,
+/// or holds a directory, or was renamed, is never touched. Returns how many
+/// were removed.
+fn drop_single_repo_projects(tx: &rusqlite::Transaction<'_>) -> anyhow::Result<usize> {
+    let candidates: Vec<(i64, String)> = {
+        let mut stmt = tx.prepare("SELECT id, name FROM projects")?;
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+    let mut removed = 0;
+    for (id, name) in candidates {
+        // Every member must resolve to a workspace, and they must all share
+        // one source_repo. A member that is a plain directory or an explicit
+        // repository root leaves `repos` short of `members`, so it bails.
+        let members: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM project_members WHERE project_id = ?1",
+            [id],
+            |r| r.get(0),
+        )?;
+        let repos: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT DISTINCT w.source_repo FROM project_members m
+                     JOIN workspaces w ON w.worktree_path = m.path
+                 WHERE m.project_id = ?1",
+            )?;
+            stmt.query_map([id], |r| r.get::<_, String>(0))?
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        if repos.len() != 1 {
+            continue;
+        }
+        let repo = &repos[0];
+        let owned: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM project_members m
+                 JOIN workspaces w ON w.worktree_path = m.path
+             WHERE m.project_id = ?1 AND w.source_repo = ?2",
+            rusqlite::params![id, repo],
+            |r| r.get(0),
+        )?;
+        if owned != members {
+            continue;
+        }
+        let total: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM workspaces WHERE source_repo = ?1 AND ephemeral = 0",
+            [repo],
+            |r| r.get(0),
+        )?;
+        if owned != total {
+            continue;
+        }
+        let folder = std::path::Path::new(repo)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| repo.clone());
+        if folder != name {
+            continue;
+        }
+        tx.execute("DELETE FROM project_members WHERE project_id = ?1", [id])?;
+        tx.execute("DELETE FROM projects WHERE id = ?1", [id])?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
 fn workspace_type_str(wt: WorkspaceType) -> &'static str {
     match wt {
         WorkspaceType::Worktree => "Worktree",
@@ -373,25 +540,21 @@ fn detect_github_origin(source_repo: &str) -> Option<String> {
 }
 
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
-    let origin_tag: String = row.get(11)?;
-    let origin_url: Option<String> = row.get(12)?;
+    let origin_tag: String = row.get(7)?;
+    let origin_url: Option<String> = row.get(8)?;
     Ok(WorkspaceEntry {
         name: row.get(0)?,
         description: row.get(1)?,
         prompt: row.get(2)?,
-        kanban_path: row.get(3)?,
-        worktree_path: PathBuf::from(row.get::<_, String>(4)?),
-        source_repo: PathBuf::from(row.get::<_, String>(5)?),
-        workspace_type: parse_workspace_type(&row.get::<_, String>(6)?),
-        order: row.get(7)?,
-        dispatch_card_id: row.get(8)?,
-        dispatch_source_kanban: row.get(9)?,
-        dispatch_agent_name: row.get(10)?,
+        worktree_path: PathBuf::from(row.get::<_, String>(3)?),
+        source_repo: PathBuf::from(row.get::<_, String>(4)?),
+        workspace_type: parse_workspace_type(&row.get::<_, String>(5)?),
+        order: row.get(6)?,
         origin: crate::domain::WorkspaceOrigin::from_sql(&origin_tag, origin_url),
-        is_git_repo: row.get(13)?,
-        ephemeral: row.get(14)?,
-        pr_repo_nwo: row.get(15)?,
-        pr_number: row.get::<_, Option<i64>>(16)?.map(|n| n as u64),
+        is_git_repo: row.get(9)?,
+        ephemeral: row.get(10)?,
+        pr_repo_nwo: row.get(11)?,
+        pr_number: row.get::<_, Option<i64>>(12)?.map(|n| n as u64),
     })
 }
 
@@ -426,20 +589,16 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
                     ws.description,
                     ws.prompt,
-                    ws.kanban_path,
                     ws.path.to_string_lossy(),
                     ws.source_repo.to_string_lossy(),
                     workspace_type_str(ws.workspace_type),
                     ws.order,
-                    ws.dispatch_card_id,
-                    ws.dispatch_source_kanban,
-                    ws.dispatch_agent_name,
                     ws.origin.tag(),
                     ws.origin.github_url(),
                     ws.is_git_repo,
@@ -458,7 +617,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         // Review-checkout (`ephemeral`) entries are kept even if
@@ -477,7 +636,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
@@ -677,6 +836,58 @@ impl super::AgentProfileStorage for Arc<SqliteStorage> {
     }
 }
 
+impl super::RepoSkillStorage for Arc<SqliteStorage> {
+    fn get_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+    ) -> anyhow::Result<Option<(u32, String)>> {
+        let conn = self.conn.lock();
+        let row = conn
+            .query_row(
+                "SELECT skill_version, status FROM repo_skill_offers
+                 WHERE source_repo = ?1 AND skill_id = ?2",
+                rusqlite::params![source_repo.to_string_lossy().as_ref(), skill_id],
+                |row| Ok((row.get::<_, i64>(0)? as u32, row.get::<_, String>(1)?)),
+            )
+            .ok();
+        Ok(row)
+    }
+
+    fn set_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+        skill_version: u32,
+        status: &str,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO repo_skill_offers (source_repo, skill_id, skill_version, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT(source_repo, skill_id) DO UPDATE SET
+                 skill_version = ?3, status = ?4, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+            rusqlite::params![
+                source_repo.to_string_lossy().as_ref(),
+                skill_id,
+                skill_version,
+                status
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn list_accepted_skills(&self, source_repo: &Path) -> anyhow::Result<Vec<String>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT skill_id FROM repo_skill_offers
+             WHERE source_repo = ?1 AND status = 'accepted' ORDER BY skill_id",
+        )?;
+        let rows = stmt.query_map([source_repo.to_string_lossy().as_ref()], |row| row.get(0))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+}
+
 impl super::ProjectStorage for Arc<SqliteStorage> {
     fn list_projects(&self) -> Vec<crate::projects::Project> {
         let conn = self.conn.lock();
@@ -697,7 +908,7 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
                 .filter_map(|r| r.ok())
                 .collect();
             let mut member_stmt = conn.prepare(
-                "SELECT path FROM project_members WHERE project_id = ?1 ORDER BY position",
+                "SELECT path, kind FROM project_members WHERE project_id = ?1 ORDER BY position",
             )?;
             for project in &mut projects {
                 project.color = project.clamped_color();
@@ -705,6 +916,9 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
                     .query_map([project.id.unwrap_or_default()], |row| {
                         Ok(crate::projects::ProjectMember {
                             path: PathBuf::from(row.get::<_, String>(0)?),
+                            kind: crate::projects::MemberKind::from_sql(
+                                &row.get::<_, String>(1).unwrap_or_default(),
+                            ),
                         })
                     })?
                     .filter_map(|r| r.ok())
@@ -739,9 +953,14 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
         tx.execute("DELETE FROM project_members WHERE project_id = ?1", [id])?;
         for (position, member) in project.members.iter().enumerate() {
             tx.execute(
-                "INSERT OR IGNORE INTO project_members (project_id, path, position)
-                 VALUES (?1, ?2, ?3)",
-                rusqlite::params![id, member.path.to_string_lossy(), position as i64],
+                "INSERT OR IGNORE INTO project_members (project_id, path, position, kind)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    id,
+                    member.path.to_string_lossy(),
+                    position as i64,
+                    member.kind.tag()
+                ],
             )?;
         }
         tx.commit()?;
@@ -772,9 +991,7 @@ mod project_storage_tests {
             order,
             members: paths
                 .iter()
-                .map(|p| ProjectMember {
-                    path: PathBuf::from(p),
-                })
+                .map(|p| ProjectMember::new(PathBuf::from(p)))
                 .collect(),
         }
     }
@@ -824,9 +1041,7 @@ mod project_storage_tests {
         assert_eq!(all[0].order, 2);
         assert_eq!(
             all[0].members,
-            vec![ProjectMember {
-                path: PathBuf::from("/tmp/z")
-            }]
+            vec![ProjectMember::new(PathBuf::from("/tmp/z"))]
         );
     }
 
@@ -881,6 +1096,269 @@ mod project_storage_tests {
         let all = storage.list_projects();
         assert_eq!(all[0].members.len(), 2);
     }
+
+    #[test]
+    fn member_kind_survives_a_roundtrip() {
+        use crate::projects::MemberKind;
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let mut p = project("mixed", 0, 0, &["/wt/app"]);
+        p.members
+            .push(ProjectMember::repo(PathBuf::from("/repos/web")));
+        storage.save_project(&p).unwrap();
+
+        let members = &storage.list_projects()[0].members;
+        assert_eq!(members[0].kind, MemberKind::Auto);
+        assert_eq!(members[1].kind, MemberKind::Repo);
+    }
+
+    /// A member row written before v12 (or by hand) has no usable kind: it
+    /// must load as `Auto`, which only ever costs it a repo header.
+    #[test]
+    fn unknown_member_kind_falls_back_to_auto() {
+        use crate::projects::MemberKind;
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let id = storage.save_project(&project("raw", 0, 0, &[])).unwrap();
+        storage
+            .conn
+            .lock()
+            .execute(
+                "INSERT INTO project_members (project_id, path, position, kind)
+                 VALUES (?1, '/wt/app', 0, 'something-else')",
+                [id],
+            )
+            .unwrap();
+        assert_eq!(storage.list_projects()[0].members[0].kind, MemberKind::Auto);
+    }
+}
+
+#[cfg(test)]
+mod repo_skill_storage_tests {
+    use super::*;
+    use crate::storage::RepoSkillStorage;
+
+    #[test]
+    fn unasked_skill_has_no_offer_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        assert_eq!(storage.get_skill_offer(&repo, "x").unwrap(), None);
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn set_then_get_round_trips_version_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "accepted").unwrap();
+        assert_eq!(
+            storage.get_skill_offer(&repo, "x").unwrap(),
+            Some((1, "accepted".to_string()))
+        );
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            vec!["x".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_second_set_overwrites_the_first_for_the_same_repo_and_skill() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "declined").unwrap();
+        storage.set_skill_offer(&repo, "x", 2, "accepted").unwrap();
+        assert_eq!(
+            storage.get_skill_offer(&repo, "x").unwrap(),
+            Some((2, "accepted".to_string()))
+        );
+    }
+
+    #[test]
+    fn decisions_are_scoped_per_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo_a = PathBuf::from("/repo/a");
+        let repo_b = PathBuf::from("/repo/b");
+
+        storage
+            .set_skill_offer(&repo_a, "x", 1, "accepted")
+            .unwrap();
+        assert_eq!(storage.get_skill_offer(&repo_b, "x").unwrap(), None);
+        assert_eq!(
+            storage.list_accepted_skills(&repo_b).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn list_accepted_skills_excludes_declined_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "accepted").unwrap();
+        storage.set_skill_offer(&repo, "y", 1, "declined").unwrap();
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            vec!["x".to_string()]
+        );
+    }
+}
+
+/// The v14 cleanup: removing the one-repository projects v12/v13 created.
+#[cfg(test)]
+mod project_cleanup_tests {
+    use super::*;
+    use crate::projects::{Project, ProjectMember};
+    use crate::storage::{ProjectStorage, WorkspaceStorage};
+
+    fn ws(name: &str, repo: &str, kind: WorkspaceType, order: u32) -> WorkspaceInfo {
+        let mut info = WorkspaceInfo::new(
+            name.to_string(),
+            String::new(),
+            String::new(),
+            PathBuf::from(format!("/wt/{name}")),
+            PathBuf::from(repo),
+        );
+        info.workspace_type = kind;
+        info.order = order;
+        info
+    }
+
+    /// `save_workspaces` is scoped to one `source_repo` per call.
+    fn save_all(storage: &Arc<SqliteStorage>, workspaces: &[WorkspaceInfo]) {
+        let mut repos: Vec<&PathBuf> = workspaces.iter().map(|w| &w.source_repo).collect();
+        repos.dedup();
+        for repo in repos {
+            storage.save_workspaces(repo, workspaces).unwrap();
+        }
+    }
+
+    fn project(name: &str, paths: &[&str]) -> Project {
+        Project {
+            id: None,
+            name: name.to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .iter()
+                .map(|p| ProjectMember::new(PathBuf::from(p)))
+                .collect(),
+        }
+    }
+
+    fn cleanup(storage: &Arc<SqliteStorage>) -> usize {
+        let mut conn = storage.conn.lock();
+        let tx = conn.transaction().unwrap();
+        let n = drop_single_repo_projects(&tx).unwrap();
+        tx.commit().unwrap();
+        n
+    }
+
+    fn with(workspaces: &[WorkspaceInfo]) -> (tempfile::TempDir, Arc<SqliteStorage>) {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        save_all(&storage, workspaces);
+        (dir, storage)
+    }
+
+    /// Exactly the shape the seeder produced: one repo, all of its checkouts,
+    /// named after the repository folder.
+    #[test]
+    fn a_seeded_one_repo_project_is_removed() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("feature", "/repos/app", WorkspaceType::Worktree, 1),
+        ];
+        let (_dir, storage) = with(&list);
+        storage
+            .save_project(&project("app", &["/wt/app", "/wt/feature"]))
+            .unwrap();
+
+        assert_eq!(cleanup(&storage), 1);
+        assert!(storage.list_projects().is_empty());
+    }
+
+    #[test]
+    fn a_project_spanning_two_repos_is_kept() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("lib", "/repos/lib", WorkspaceType::Simple, 1),
+        ];
+        let (_dir, storage) = with(&list);
+        storage
+            .save_project(&project("app", &["/wt/app", "/wt/lib"]))
+            .unwrap();
+
+        assert_eq!(cleanup(&storage), 0);
+        assert_eq!(storage.list_projects().len(), 1);
+    }
+
+    /// A renamed project is the user's, whatever it holds.
+    #[test]
+    fn a_renamed_one_repo_project_is_kept() {
+        let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
+        let (_dir, storage) = with(&list);
+        storage
+            .save_project(&project("my stuff", &["/wt/app"]))
+            .unwrap();
+
+        assert_eq!(cleanup(&storage), 0);
+        assert_eq!(storage.list_projects()[0].name, "my stuff");
+    }
+
+    /// Holding only SOME of a repository's checkouts is a deliberate pick, not
+    /// the seeder's output.
+    #[test]
+    fn a_project_holding_part_of_a_repo_is_kept() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("feature", "/repos/app", WorkspaceType::Worktree, 1),
+        ];
+        let (_dir, storage) = with(&list);
+        storage
+            .save_project(&project("app", &["/wt/feature"]))
+            .unwrap();
+
+        assert_eq!(cleanup(&storage), 0);
+    }
+
+    /// A plain-directory member never came from the seeder.
+    #[test]
+    fn a_project_with_a_directory_member_is_kept() {
+        let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
+        let (_dir, storage) = with(&list);
+        storage
+            .save_project(&project("app", &["/wt/app", "/home/me/notes"]))
+            .unwrap();
+
+        assert_eq!(cleanup(&storage), 0);
+    }
+
+    #[test]
+    fn cleanup_is_idempotent_and_leaves_no_orphan_members() {
+        let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
+        let (_dir, storage) = with(&list);
+        storage.save_project(&project("app", &["/wt/app"])).unwrap();
+
+        assert_eq!(cleanup(&storage), 1);
+        assert_eq!(cleanup(&storage), 0);
+        let orphans: i64 = storage
+            .conn
+            .lock()
+            .query_row("SELECT COUNT(*) FROM project_members", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(orphans, 0);
+    }
 }
 
 #[cfg(test)]
@@ -903,7 +1381,6 @@ mod review_workspace_tests {
             "owner/repo#7".to_string(),
             "Some PR".to_string(),
             "".to_string(),
-            None,
             missing_checkout,
             git_root.clone(),
         );
@@ -940,7 +1417,6 @@ mod review_workspace_tests {
             "regular-ws".to_string(),
             "".to_string(),
             "".to_string(),
-            None,
             git_root.join("does-not-exist"),
             git_root.clone(),
         );

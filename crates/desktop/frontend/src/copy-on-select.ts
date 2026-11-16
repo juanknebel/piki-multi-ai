@@ -1,4 +1,5 @@
-// Copy-on-select as a pure state machine (no DOM, vitest-covered).
+// Selection-to-clipboard helpers (no DOM, vitest-covered): the copy-on-select
+// gesture machine plus the guidance for an explicit Copy that found nothing.
 //
 // xterm fires `onSelectionChange` for every pointer move while the user
 // drags — selecting 40 rows is 40+ events — and the old code wrote the
@@ -51,4 +52,20 @@ export function createSelectionCopier(): SelectionCopier {
       return dirty;
     },
   };
+}
+
+/** Guidance toast for an explicit Copy (menu / Ctrl+Shift+C) that found no
+ *  selection. `mouseTracking` is `terminal.modes.mouseTrackingMode !==
+ *  "none"`; `mac` is `isMac` (shortcuts.ts).
+ *
+ *  A program that reports the mouse (mirror's TUI enables 1000/1003/1006)
+ *  eats plain drags — mirror even selects inside its own UI — so xterm's
+ *  selection stays empty and the copy would silently do nothing. Off macOS
+ *  xterm bypasses the app while Shift is held (`shouldForceSelection`), so
+ *  Shift+drag selects; on macOS there is no bypass (we don't set
+ *  `macOptionClickForcesSelection`), so Select All is the way out. */
+export function emptyCopyHint(mouseTracking: boolean, mac: boolean): string {
+  if (!mouseTracking) return "Nothing selected — drag to select text first";
+  if (!mac) return "This app tracks the mouse — hold Shift while dragging to select, then copy again";
+  return "This app tracks the mouse — use Select All from the right-click menu, then copy";
 }

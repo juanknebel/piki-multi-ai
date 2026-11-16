@@ -38,6 +38,74 @@ pub(super) fn finish_workspace_creation(app: &mut App, mut info: piki_core::Work
 
     let source = app.workspaces[new_idx].source_repo.clone();
     crate::helpers::persist_workspaces(app, source);
+    adopt_into_pending_project(app, new_idx);
+    offer_skills_if_pending(app, new_idx);
+}
+
+/// Silently re-apply whatever piki skills were already accepted for this
+/// repo (so a second worktree of an already-decided repo picks them up too,
+/// without re-prompting), then open `DialogState::SkillOffers` for anything
+/// still undecided. No-op when skill storage is unavailable or nothing is
+/// pending — never blocks workspace creation on this.
+fn offer_skills_if_pending(app: &mut App, workspace_idx: usize) {
+    let Some(storage) = app.storage.repo_skills.as_deref() else {
+        return;
+    };
+    let Some(ws) = app.workspaces.get(workspace_idx) else {
+        return;
+    };
+    let source_repo = ws.source_repo.clone();
+    let agents_md_path = ws.path.join("AGENTS.md");
+    let _ = piki_core::repo_skills::sync_accepted_skills(storage, &source_repo, &agents_md_path);
+
+    let pending = piki_core::repo_skills::pending_offers(storage, &source_repo);
+    if pending.is_empty() {
+        return;
+    }
+    app.active_dialog = Some(DialogState::SkillOffers {
+        workspace_idx,
+        skills: pending,
+    });
+    app.mode = app::AppMode::SkillOffers;
+}
+
+/// Make the freshly created checkout a member of the project the sidebar was
+/// standing in (`App::pending_project_member`) — set by `add_repo` and by
+/// `new_worktree`. Membership is never inferred from a shared repository (see
+/// `piki_core::projects::tree`), so these two are the only places that spare
+/// the user the bookkeeping. A no-op for every other creation path, and the
+/// flag is cleared either way so a later unrelated creation can't inherit it.
+fn adopt_into_pending_project(app: &mut App, new_idx: usize) {
+    let Some(project_id) = app.pending_project_member.take() else {
+        return;
+    };
+    let Some(store) = app.storage.projects.as_ref() else {
+        return;
+    };
+    let path = app.workspaces[new_idx].info.path.clone();
+    let Some(mut project) = store
+        .list_projects()
+        .into_iter()
+        .find(|p| p.id == Some(project_id))
+    else {
+        return;
+    };
+    if project.members.iter().any(|m| m.path == path) {
+        return;
+    }
+    project
+        .members
+        .push(piki_core::projects::ProjectMember::new(path));
+    let name = project.name.clone();
+    if let Err(e) = store.save_project(&project) {
+        app.set_toast(
+            format!("could not add to project: {e}"),
+            crate::app::ToastLevel::Error,
+        );
+    } else {
+        app.set_toast(format!("Added to {name}"), crate::app::ToastLevel::Success);
+    }
+    app.reload_sidebar_projects();
 }
 
 pub(super) async fn handle(
@@ -47,21 +115,17 @@ pub(super) async fn handle(
     _terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, prompt, kanban_path, dir, ws_type) => {
+        Action::CreateWorkspace(name, description, prompt, dir, ws_type) => {
             let result = match ws_type {
                 WorkspaceType::Simple => {
                     manager
-                        .create_simple(&name, &description, &prompt, kanban_path, &dir)
+                        .create_simple(&name, &description, &prompt, &dir)
                         .await
                 }
-                WorkspaceType::Worktree => {
-                    manager
-                        .create(&name, &description, &prompt, kanban_path, &dir)
-                        .await
-                }
+                WorkspaceType::Worktree => manager.create(&name, &description, &prompt, &dir).await,
                 WorkspaceType::Project => {
                     manager
-                        .create_project(&name, &description, &prompt, kanban_path, &dir)
+                        .create_project(&name, &description, &prompt, &dir)
                         .await
                 }
             };
@@ -72,23 +136,9 @@ pub(super) async fn handle(
                 }
             }
         }
-        Action::CreateGithubWorkspace(
-            name,
-            description,
-            prompt,
-            kanban_path,
-            github_url,
-            destination_dir,
-        ) => {
+        Action::CreateGithubWorkspace(name, description, prompt, github_url, destination_dir) => {
             let result = manager
-                .create_from_github(
-                    &name,
-                    &description,
-                    &prompt,
-                    kanban_path,
-                    &github_url,
-                    &destination_dir,
-                )
+                .create_from_github(&name, &description, &prompt, &github_url, &destination_dir)
                 .await;
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
@@ -134,7 +184,7 @@ pub(super) async fn handle(
         } => {
             let Some(parent) = app.workspaces.get(parent_idx) else {
                 app.set_toast(
-                    "Parent workspace no longer exists",
+                    "The parent checkout no longer exists",
                     crate::app::ToastLevel::Error,
                 );
                 return Ok(());
@@ -151,76 +201,18 @@ pub(super) async fn handle(
                 }
             }
         }
-        Action::EditWorkspace(idx, kanban_path, prompt) => {
+        Action::EditWorkspace(idx, prompt) => {
             if let Some(ws) = app.workspaces.get_mut(idx) {
-                if ws.kanban_path != kanban_path {
-                    ws.kanban_app = None;
-                    ws.kanban_provider = None;
-                }
-                ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
                 {
                     let source = ws.source_repo.clone();
                     crate::helpers::persist_workspaces(app, source);
                 }
-                app.set_toast("Workspace updated", ToastLevel::Success);
+                app.set_toast("Checkout updated", ToastLevel::Success);
             }
         }
-        Action::DeleteWorkspace(idx, target_column) => {
+        Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
-                // If this was a dispatched agent, move card to the chosen column
-                let dispatch_info = app.workspaces[idx]
-                    .info
-                    .dispatch_card_id
-                    .clone()
-                    .zip(app.workspaces[idx].info.dispatch_source_kanban.clone());
-                if let Some((card_id, kanban_path)) = dispatch_info
-                    && let Some(target_col) = target_column
-                {
-                    let source_ws_idx = app.workspaces.iter().position(|w| {
-                        w.kanban_path.as_deref() == Some(kanban_path.as_str())
-                            && w.kanban_provider.is_some()
-                    });
-                    let mut kanban_err: Option<String> = None;
-                    if let Some(src_idx) = source_ws_idx {
-                        let src_ws = &mut app.workspaces[src_idx];
-                        if let Some(ref mut kp) = src_ws.kanban_provider {
-                            if let Ok(board) = kp.load_board() {
-                                for col in &board.columns {
-                                    if let Some(card) = col.cards.iter().find(|c| c.id == card_id) {
-                                        if let Err(e) = kp.update_card(
-                                            &card_id,
-                                            &card.title,
-                                            &card.description,
-                                            card.priority,
-                                            "",
-                                            &card.project,
-                                        ) {
-                                            kanban_err = Some(e.to_string());
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            if let Err(e) = kp.move_card(&card_id, &target_col) {
-                                kanban_err = Some(e.to_string());
-                            }
-                            if let Ok(board) = kp.load_board()
-                                && let Some(ref mut ka) = src_ws.kanban_app
-                            {
-                                ka.board = board;
-                                ka.clamp();
-                            }
-                        }
-                    }
-                    if let Some(e) = kanban_err {
-                        app.set_toast(
-                            format!("Kanban card move failed: {e}"),
-                            crate::app::ToastLevel::Error,
-                        );
-                    }
-                }
-
                 let is_worktree =
                     app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
                 let is_ephemeral = app.workspaces[idx].info.ephemeral;
@@ -329,6 +321,50 @@ pub(super) async fn handle(
 
                 // Persist config
                 crate::helpers::persist_workspaces(app, source_repo.clone());
+            }
+        }
+        Action::RespondToSkillOffers {
+            workspace_idx,
+            accepted,
+            declined,
+        } => {
+            let Some(storage) = app.storage.repo_skills.as_deref() else {
+                return Ok(());
+            };
+            let Some(ws) = app.workspaces.get(workspace_idx) else {
+                return Ok(());
+            };
+            let source_repo = ws.source_repo.clone();
+            let agents_md_path = ws.path.join("AGENTS.md");
+
+            for id in accepted.iter().chain(declined.iter()) {
+                let Some(skill) = piki_core::repo_skills::SKILLS.iter().find(|s| s.id == *id)
+                else {
+                    continue;
+                };
+                let status = if accepted.contains(id) {
+                    "accepted"
+                } else {
+                    "declined"
+                };
+                let _ = storage.set_skill_offer(&source_repo, skill.id, skill.version, status);
+            }
+            match piki_core::repo_skills::sync_accepted_skills(
+                storage,
+                &source_repo,
+                &agents_md_path,
+            ) {
+                Ok(()) if !accepted.is_empty() => {
+                    app.set_toast(
+                        "Added piki skills to AGENTS.md".to_string(),
+                        ToastLevel::Success,
+                    );
+                }
+                Err(e) => app.set_toast(
+                    format!("Failed to update AGENTS.md: {e}"),
+                    ToastLevel::Error,
+                ),
+                _ => {}
             }
         }
         other => unreachable!("non-workspace action routed to action::workspace: {other:?}"),

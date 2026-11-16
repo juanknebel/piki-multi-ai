@@ -82,11 +82,6 @@
   height: 100%;
 }
 
-#workspace-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
 /* Agents panel docked at the bottom of the sidebar, below whichever view is
    active (TUI bottom-left pane) — ALWAYS visible. Defaults to at most 40% of
    the sidebar; the drag handle above it sets an explicit height (persisted),

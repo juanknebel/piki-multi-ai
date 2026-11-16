@@ -18,6 +18,7 @@ pub(crate) fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
         ui_prefs: None,
         agent_profiles: None,
         projects: None,
+        repo_skills: None,
     })
 }
 
@@ -102,13 +103,9 @@ pub(crate) fn test_ws_info(name: &str, order: u32) -> piki_core::WorkspaceInfo {
         workspace_type: piki_core::WorkspaceType::Simple,
         description: String::new(),
         prompt: String::new(),
-        kanban_path: None,
         order,
         source_repo: std::path::PathBuf::from(format!("/tmp/test-{order}")),
         source_repo_display: String::new(),
-        dispatch_card_id: None,
-        dispatch_source_kanban: None,
-        dispatch_agent_name: None,
         origin: piki_core::WorkspaceOrigin::default(),
         is_git_repo: true,
         ephemeral: false,

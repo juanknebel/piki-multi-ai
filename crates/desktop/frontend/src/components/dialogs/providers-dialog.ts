@@ -145,6 +145,8 @@ export async function showProvidersDialog() {
       prompt_flag: "",
       dispatchable: true,
       agent_dir: null,
+      idle_threshold_secs: null,
+      idle_notify: true,
     };
 
     body.innerHTML = `
@@ -181,6 +183,14 @@ export async function showProvidersDialog() {
         <label class="dialog-label">Agent Dir (e.g. .my-ai/agents)</label>
         <input class="ui-input f-agentdir" type="text" value="${escAttr(p.agent_dir ?? "")}" />
       </div>
+      <div class="dialog-field">
+        <label class="dialog-label">Idle Threshold Secs (empty = default)</label>
+        <input class="ui-input f-idle" type="text" inputmode="numeric" value="${p.idle_threshold_secs ?? ""}" />
+      </div>
+      <label class="dialog-field" style="flex-direction:row;align-items:center;gap:8px">
+        <input class="f-idlenotify" type="checkbox" ${p.idle_notify ? "checked" : ""} />
+        <span class="dialog-label" style="margin:0">Idle Notify (toast when the agent goes quiet)</span>
+      </label>
       <div class="dialog-footer" style="border:none;padding:0;background:none;margin-top:6px">
         <button data-variant="secondary" class="ui-btn btn-cancel">Cancel</button>
         <button data-variant="primary" class="ui-btn btn-save">Save</button>
@@ -217,6 +227,15 @@ export async function showProvidersDialog() {
         return;
       }
       const argsStr = (body.querySelector<HTMLInputElement>(".f-args")!).value.trim();
+      const idleStr = (body.querySelector<HTMLInputElement>(".f-idle")!).value.trim();
+      let idle_threshold_secs: number | null = null;
+      if (idleStr) {
+        if (!/^\d+$/.test(idleStr)) {
+          toast("Idle threshold must be seconds (digits) or empty for default", "error");
+          return;
+        }
+        idle_threshold_secs = parseInt(idleStr, 10);
+      }
       const detail: ProviderDetail = {
         name,
         description: (body.querySelector<HTMLInputElement>(".f-desc")!).value.trim(),
@@ -226,6 +245,8 @@ export async function showProvidersDialog() {
         prompt_flag: (body.querySelector<HTMLInputElement>(".f-flag")!).value.trim(),
         dispatchable: (body.querySelector<HTMLInputElement>(".f-dispatch")!).checked,
         agent_dir: (body.querySelector<HTMLInputElement>(".f-agentdir")!).value.trim() || null,
+        idle_threshold_secs,
+        idle_notify: (body.querySelector<HTMLInputElement>(".f-idlenotify")!).checked,
       };
       try {
         await saveProvider(detail);

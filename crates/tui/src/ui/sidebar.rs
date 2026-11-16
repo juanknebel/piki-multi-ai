@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -7,89 +6,51 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-use crate::app::{ActivePane, App, SidebarItem, SidebarView, Workspace, agent_status_severity};
+use crate::app::{ActivePane, App, Bucket, ProjectTreeRow, Workspace, agent_status_severity};
 use piki_core::WorkspaceType;
 use piki_core::cli_agent::CliAgentStatus;
 
 use super::dialogs::projects::{ellipsize_end, ellipsize_start};
 use super::layout::{pane_border_style, pane_title_style};
 
-/// Tab labels for the top-left pane (Workspaces | Projects). Both render in
-/// the top border when they fit; a narrow pane shows only the active one.
-const TAB_WORKSPACES: &str = " WORKSPACES ";
-const TAB_PROJECTS: &str = " PROJECTS ";
-const TAB_WORKSPACES_W: u16 = 12;
-const TAB_PROJECTS_W: u16 = 10;
+/// Pane title. One view now — the project tree — so the title is a label,
+/// not a tab bar.
+const PANE_TITLE: &str = " PROJECTS ";
 
-/// Whether the pane's top border has room for both tab labels + separator.
-fn sidebar_tabs_fit(area: Rect) -> bool {
-    area.width.saturating_sub(2) >= TAB_WORKSPACES_W + 1 + TAB_PROJECTS_W
-}
-
-/// The pane title as a tab bar: the active view carries the pane-title
-/// style, the other one recedes; a `│` separates them.
-fn sidebar_tab_title(app: &App, area: Rect) -> Line<'static> {
-    let active = pane_title_style(app, ActivePane::WorkspaceList);
-    let inactive = Style::default().fg(app.theme.palette.fg3);
-    if !sidebar_tabs_fit(area) {
-        let label = match app.sidebar_view {
-            SidebarView::Workspaces => TAB_WORKSPACES,
-            SidebarView::Projects => TAB_PROJECTS,
-        };
-        return Line::from(Span::styled(label, active));
-    }
-    let (ws_style, pr_style) = match app.sidebar_view {
-        SidebarView::Workspaces => (active, inactive),
-        SidebarView::Projects => (inactive, active),
-    };
-    Line::from(vec![
-        Span::styled(TAB_WORKSPACES, ws_style),
-        Span::styled("│", Style::default().fg(app.theme.palette.line)),
-        Span::styled(TAB_PROJECTS, pr_style),
-    ])
-}
-
-/// Which sidebar tab a click at (col, row) lands on, mirroring
-/// `sidebar_tab_title`'s geometry (titles start one cell past the corner).
-/// When the pane is too narrow for both labels, a click on the single title
-/// switches to the other view — the tab bar stays reachable.
-pub(crate) fn sidebar_tab_hit(app: &App, col: u16, row: u16) -> Option<SidebarView> {
-    let area = app.ws_list_area;
-    if area.height == 0 || row != area.y {
-        return None;
-    }
-    let start = area.x + 1;
-    if !sidebar_tabs_fit(area) {
-        let len = match app.sidebar_view {
-            SidebarView::Workspaces => TAB_WORKSPACES_W,
-            SidebarView::Projects => TAB_PROJECTS_W,
-        };
-        let other = match app.sidebar_view {
-            SidebarView::Workspaces => SidebarView::Projects,
-            SidebarView::Projects => SidebarView::Workspaces,
-        };
-        return (col >= start && col < start + len).then_some(other);
-    }
-    if col >= start && col < start + TAB_WORKSPACES_W {
-        Some(SidebarView::Workspaces)
-    } else if col > start + TAB_WORKSPACES_W && col <= start + TAB_WORKSPACES_W + TAB_PROJECTS_W {
-        Some(SidebarView::Projects)
-    } else {
-        None
+/// Display label for a synthetic bucket header. Core only hands back the
+/// variant; the wording is the frontend's (the desktop mirrors it).
+///
+/// Only PR review has a header: loose repositories render at the top level
+/// with none, and a real project shows its own name — both return "" and never
+/// reach a row.
+fn bucket_label(bucket: Bucket) -> &'static str {
+    match bucket {
+        Bucket::PrReview => "pr-review",
+        Bucket::Project(_) | Bucket::Unassigned => "",
     }
 }
 
-/// Icon prefix for a workspace row. A `Simple` workspace pointed at a plain
+/// Icon prefix for a checkout row. A `Simple` workspace pointed at a plain
 /// (non-git) directory gets a distinct folder icon — otherwise it's
 /// indistinguishable from a git-backed one until its branch happens to
 /// resolve (see `Workspace::branch`). An ephemeral PR review checkout gets
 /// its own icon regardless of type, since it's transient in a way none of
-/// the other workspace kinds are.
-fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool, ephemeral: bool) -> &'static str {
+/// the other workspace kinds are. A parent — the original clone of a repo
+/// group with worktree rows beside it — gets a filled disc, so it reads
+/// apart from lone checkouts (○) and from its own children (⎇).
+fn workspace_type_icon(
+    ws_type: WorkspaceType,
+    is_git_repo: bool,
+    ephemeral: bool,
+    is_parent: bool,
+) -> &'static str {
     if ephemeral {
         // Ad-hoc PR review checkout — never persisted, deleted on close.
         // Distinct from every other icon so it reads as "throwaway" at a glance.
         return "◎ ";
+    }
+    if is_parent {
+        return "◉ ";
     }
     match ws_type {
         WorkspaceType::Worktree => "⎇ ",
@@ -99,116 +60,91 @@ fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool, ephemeral: boo
     }
 }
 
-/// Per-`source_repo` rollup used to drive label choice (folder name vs. own
-/// name) and, when a family's parent row is collapsed, to surface its hidden
-/// children's attention signals (idle notification, agent status, changed
-/// files, ahead/behind) onto that one visible row instead of losing them.
-#[derive(Default, Clone)]
-struct FamilySummary {
-    count: usize,
-    has_parent: bool,
+/// Attention signals for one row, or rolled up across a collapsed header's
+/// hidden descendants — otherwise collapsing a project would silently hide
+/// the one agent that needs you.
+#[derive(Default, Clone, Copy)]
+struct Signals {
     has_idle: bool,
     worst_status: Option<(CliAgentStatus, bool)>,
-    changed_files: usize,
+    changed: usize,
     ahead: usize,
     behind: usize,
 }
 
-/// How a row relates to its worktree family, resolved once per row and
-/// shared by both the gutter-width pre-pass and the actual render pass.
-struct RowClass<'a> {
-    is_parent: bool,
-    is_child: bool,
-    has_parent: bool,
-    summary: &'a FamilySummary,
-}
-
-fn classify_row<'a>(
-    ws: &Workspace,
-    family_info: &'a HashMap<PathBuf, FamilySummary>,
-) -> RowClass<'a> {
-    static EMPTY: FamilySummary = FamilySummary {
-        count: 0,
-        has_parent: false,
-        has_idle: false,
-        worst_status: None,
-        changed_files: 0,
-        ahead: 0,
-        behind: 0,
-    };
-    let summary = family_info.get(&ws.info.source_repo).unwrap_or(&EMPTY);
-    let is_parent = summary.count > 1 && ws.info.workspace_type != WorkspaceType::Worktree;
-    let is_child = summary.count > 1 && ws.info.workspace_type == WorkspaceType::Worktree;
-    RowClass {
-        is_parent,
-        is_child,
-        has_parent: summary.has_parent,
-        summary,
-    }
-}
-
-/// A row's effective attention signals: its own values normally, or its
-/// worktree family's aggregate when it's a collapsed parent — otherwise a
-/// hidden child's attention would vanish entirely.
-struct EffectiveSignals {
-    has_idle: bool,
-    status: Option<(CliAgentStatus, bool)>,
-    changed: usize,
-    ahead_behind: Option<(usize, usize)>,
-}
-
-fn effective_signals(
-    ws: &Workspace,
-    class: &RowClass,
-    collapsed: Option<bool>,
-) -> EffectiveSignals {
-    if class.is_parent && collapsed.unwrap_or(false) {
-        let s = class.summary;
-        EffectiveSignals {
-            has_idle: s.has_idle,
-            status: s.worst_status,
-            changed: s.changed_files,
-            ahead_behind: (s.ahead > 0 || s.behind > 0).then_some((s.ahead, s.behind)),
-        }
-    } else {
-        EffectiveSignals {
+impl Signals {
+    fn of(ws: &Workspace) -> Self {
+        let (ahead, behind) = ws.ahead_behind.unwrap_or((0, 0));
+        Self {
             has_idle: ws.has_idle_notification,
-            status: ws.agent_status_rollup(),
+            worst_status: ws.agent_status_rollup(),
             changed: ws.file_count(),
-            ahead_behind: ws.ahead_behind,
+            ahead,
+            behind,
         }
     }
+
+    fn absorb(&mut self, other: Signals) {
+        self.has_idle |= other.has_idle;
+        if let Some((status, attention)) = other.worst_status {
+            let worse = self.worst_status.is_none_or(|(s, a)| {
+                agent_status_severity(status, attention) > agent_status_severity(s, a)
+            });
+            if worse {
+                self.worst_status = Some((status, attention));
+            }
+        }
+        self.changed += other.changed;
+        self.ahead += other.ahead;
+        self.behind += other.behind;
+    }
+
+    fn ahead_behind(&self) -> Option<(usize, usize)> {
+        (self.ahead > 0 || self.behind > 0).then_some((self.ahead, self.behind))
+    }
+}
+
+/// Signals per collapse key, so a collapsed project can surface what it is
+/// hiding. Which workspaces each key hides comes from core
+/// (`projects::tree::hidden_checkouts`) — the rows being drawn can't answer it,
+/// and re-deriving it here from `source_repo` would reintroduce exactly the
+/// membership inference the tree dropped.
+fn rollups(app: &App) -> HashMap<String, Signals> {
+    let infos: Vec<piki_core::WorkspaceInfo> =
+        app.workspaces.iter().map(|w| w.info.clone()).collect();
+    piki_core::projects::tree::hidden_checkouts(&app.sidebar_projects, &infos)
+        .into_iter()
+        .map(|(key, indices)| {
+            let mut sig = Signals::default();
+            for i in indices {
+                sig.absorb(Signals::of(&app.workspaces[i]));
+            }
+            (key, sig)
+        })
+        .collect()
 }
 
 /// Right-aligned metadata spans (agent status glyph, changed-file count,
-/// ahead/behind) for a row's effective signals. `detail_color` styles the
-/// Δ/↑↓ text; the status glyph keeps its own semantic color regardless.
-fn right_metadata_spans(
-    app: &App,
-    detail_color: Color,
-    status: Option<(CliAgentStatus, bool)>,
-    changed: usize,
-    ahead_behind: Option<(usize, usize)>,
-) -> Vec<Span<'static>> {
+/// ahead/behind) for a row's signals. `detail_color` styles the Δ/↑↓ text;
+/// the status glyph keeps its own semantic color regardless.
+fn right_metadata_spans(app: &App, detail_color: Color, sig: &Signals) -> Vec<Span<'static>> {
     let mut right: Vec<Span<'static>> = Vec::new();
-    if let Some((status, attention)) = status
+    if let Some((status, attention)) = sig.worst_status
         && let Some((glyph, color)) =
             crate::ui::actionable_status_view(&app.theme, status, attention)
     {
         right.push(Span::styled(glyph.to_string(), Style::default().fg(color)));
     }
-    if changed > 0 {
+    if sig.changed > 0 {
         if !right.is_empty() {
             right.push(Span::raw(" "));
         }
         right.push(Span::styled(
-            format!("{}∆", changed),
+            format!("{}∆", sig.changed),
             Style::default().fg(detail_color),
         ));
     }
-    if let Some((ahead, behind)) = ahead_behind
-        && (ahead > 0 || behind > 0)
-    {
+    if let Some((ahead, behind)) = sig.ahead_behind() {
         if !right.is_empty() {
             right.push(Span::raw(" "));
         }
@@ -227,17 +163,47 @@ fn right_metadata_spans(
     right
 }
 
-/// Top-left pane: a tab bar hosting the Workspaces tree and the Projects
-/// list — whichever `app.sidebar_view` says, so the pane always opens on
-/// the view the user prefers.
+/// Label for a checkout row. A hoisted row IS its repository — every git
+/// checkout is its own row — so it is named the way the old flat sidebar
+/// named a clone: the repository folder, with the branch alongside when one
+/// is known. A non-hoisted row (a plain-directory workspace, a PR review) has
+/// no repository to name, so it carries its own identity plus a branch if
+/// any. `branch == None` (the background refresh hasn't landed, or the
+/// directory isn't a git repo) must never leave the row blank.
+fn checkout_label(ws: &Workspace, hoisted: bool) -> String {
+    if hoisted {
+        let folder = ws
+            .info
+            .source_repo
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                if ws.info.source_repo_display.is_empty() {
+                    ws.name.clone()
+                } else {
+                    ws.info.source_repo_display.clone()
+                }
+            });
+        return match &ws.branch {
+            Some(branch) => format!("{folder} ({branch})"),
+            None => folder,
+        };
+    }
+    match &ws.branch {
+        Some(branch) => format!("{} ({branch})", ws.name),
+        None => ws.name.clone(),
+    }
+}
+
+/// Top-left pane: the project tree — a collapsible project header, then one
+/// flat row per member. The only sidebar view: every registered workspace is
+/// reachable here, under a project or loose at the top level (see
+/// `piki_core::projects::tree`).
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
 
-    if app.sidebar_view == SidebarView::Projects {
-        render_projects_pane(frame, area, app);
-        return;
-    }
     // Selection has two temperatures: the iris wash where the focus is, a
     // neutral raised surface where it is not — you never lose your place.
     let sel_bg = if app.active_pane == ActivePane::WorkspaceList {
@@ -253,387 +219,195 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.theme.palette.fg3
     };
-    // Muted vertical guide that ties group children back to their header.
-    let guide_fg = app.theme.palette.line;
+    let header_style = Style::default()
+        .fg(theme.name_inactive)
+        .add_modifier(Modifier::BOLD);
 
     let block = Block::default()
-        .title(sidebar_tab_title(app, area))
+        .title(PANE_TITLE)
+        .title_style(pane_title_style(app, ActivePane::WorkspaceList))
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
-    if app.workspaces.is_empty() {
+    let rows = app.sidebar_rows();
+    if rows.is_empty() {
         let key_style = Style::default().fg(app.theme.footer.key);
         let desc_style = Style::default().fg(theme.empty_text);
         let lines = vec![
             Line::from(""),
             Line::from(vec![
                 Span::styled(
+                    format!(" [{}]", app.config.get_binding("projects", "new")),
+                    key_style,
+                ),
+                Span::styled(" New project", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled(
                     format!(" [{}]", app.config.get_binding("app", "new_workspace")),
                     key_style,
                 ),
-                Span::styled(" New workspace", desc_style),
-            ]),
-        ];
-        let text = Paragraph::new(lines).block(block);
-        frame.render_widget(text, area);
-        return;
-    }
-
-    let sidebar_items = app.sidebar_items();
-    let visual_rows = app.sidebar_visual_rows();
-
-    // Precompute, per source_repo, how many loaded workspaces share it,
-    // whether one of them is a non-Worktree "parent", and the family's
-    // aggregated attention signals (folded in below). Drives label choice,
-    // the vertical guide, and what a collapsed parent surfaces on its own row.
-    let mut family_info: HashMap<PathBuf, FamilySummary> = HashMap::new();
-    for ws in &app.workspaces {
-        let entry = family_info.entry(ws.info.source_repo.clone()).or_default();
-        entry.count += 1;
-        if ws.info.workspace_type != WorkspaceType::Worktree {
-            entry.has_parent = true;
-        }
-        entry.has_idle |= ws.has_idle_notification;
-        if let Some((status, attention)) = ws.agent_status_rollup() {
-            let better = entry.worst_status.is_none_or(|(s, a)| {
-                agent_status_severity(status, attention) > agent_status_severity(s, a)
-            });
-            if better {
-                entry.worst_status = Some((status, attention));
-            }
-        }
-        entry.changed_files += ws.file_count();
-        if let Some((ahead, behind)) = ws.ahead_behind {
-            entry.ahead += ahead;
-            entry.behind += behind;
-        }
-    }
-
-    // All rows are one line tall; the wheel scrolls the viewport freely and
-    // selection moves pull it along (see `reveal_sidebar_selection`).
-    let visible_height = area.height.saturating_sub(2) as usize;
-    let scroll_offset = app.sidebar_viewport();
-
-    let items: Vec<ListItem> = visual_rows
-        .iter()
-        .skip(scroll_offset)
-        .take(visible_height)
-        .map(|slot| {
-            let Some(row) = *slot else {
-                return ListItem::new(vec![Line::from("")]);
-            };
-            let item = &sidebar_items[row];
-            let is_selected = row == app.selected_sidebar_row;
-            match item {
-                SidebarItem::Workspace { index, collapsed } => {
-                    let ws = &app.workspaces[*index];
-                    let class = classify_row(ws, &family_info);
-                    let is_parent = class.is_parent;
-                    let is_child = class.is_child;
-                    let guide = is_child && class.has_parent;
-
-                    let detail_color = if is_selected {
-                        theme.detail_selected
-                    } else {
-                        theme.detail_normal
-                    };
-
-                    let is_active = *index == app.active_workspace;
-                    // Icon brightness carries a second signal: parent/active
-                    // rows are "the point of attention" and stay at full
-                    // brightness, plain flat/child rows recede to the same
-                    // muted token the tree guide already uses — so scanning
-                    // the list, only containers and the active workspace pop.
-                    let icon_color = if is_selected {
-                        theme.detail_selected
-                    } else if is_active || is_parent {
-                        theme.detail_normal
-                    } else {
-                        app.theme.palette.fg3
-                    };
-                    let header_style = Style::default()
-                        .fg(theme.name_inactive)
-                        .add_modifier(Modifier::BOLD);
-
-                    // Label: any non-Worktree workspace shows the repo folder
-                    // name, with its own branch alongside whenever it has one
-                    // ("agent-multi (master)") — `branch == None` means the
-                    // configured folder isn't actually a git repo (`Project`
-                    // workspaces, or a `Simple` one pointed at a plain
-                    // directory) or the background refresh hasn't landed yet,
-                    // so there's nothing to show there. A worktree child shows
-                    // its own directory's last path segment the same way,
-                    // since `branch` is inferred lazily (see `Workspace::branch`)
-                    // and must never leave the row blank while that's pending;
-                    // an orphaned worktree with no recognized parent falls back
-                    // to its own name.
-                    let is_worktree = ws.info.workspace_type == WorkspaceType::Worktree;
-                    let label = if !is_worktree {
-                        let folder = ws
-                            .info
-                            .source_repo
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .filter(|s| !s.is_empty())
-                            .unwrap_or_else(|| {
-                                if !ws.info.source_repo_display.is_empty() {
-                                    ws.info.source_repo_display.clone()
-                                } else {
-                                    ws.name.clone()
-                                }
-                            });
-                        match &ws.branch {
-                            Some(branch) => format!("{folder} ({branch})"),
-                            None => folder,
-                        }
-                    } else if is_child {
-                        let leaf = ws
-                            .info
-                            .path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .filter(|s| !s.is_empty())
-                            .unwrap_or_else(|| ws.name.clone());
-                        match &ws.branch {
-                            Some(branch) => format!("{leaf} ({branch})"),
-                            None => leaf,
-                        }
-                    } else {
-                        ws.name.clone()
-                    };
-
-                    // Selection rail in col 0; chevron/guide in col 1. The
-                    // active workspace is carried by the name weight/brightness.
-                    let bar = if is_selected {
-                        Span::styled("▎", Style::default().fg(sel_bar_fg))
-                    } else {
-                        Span::raw(" ")
-                    };
-                    let second_col = if is_parent {
-                        let arrow = if collapsed.unwrap_or(false) {
-                            "▸"
-                        } else {
-                            "▾"
-                        };
-                        Span::styled(format!("{} ", arrow), header_style)
-                    } else if guide {
-                        Span::styled("│ ", Style::default().fg(guide_fg))
-                    } else {
-                        Span::raw("  ")
-                    };
-                    let type_icon = workspace_type_icon(
-                        ws.info.workspace_type,
-                        ws.info.is_git_repo,
-                        ws.info.ephemeral,
-                    );
-
-                    // A collapsed family parent surfaces its hidden children's
-                    // signals (idle dot + metadata below) instead of losing
-                    // them — see `effective_signals`.
-                    let sig = effective_signals(ws, &class, *collapsed);
-
-                    let mut left: Vec<Span> = vec![
-                        bar,
-                        second_col,
-                        Span::styled(type_icon, Style::default().fg(icon_color)),
-                        Span::styled(
-                            label,
-                            if is_active {
-                                Style::default()
-                                    .fg(theme.name_active)
-                                    .add_modifier(Modifier::BOLD)
-                            } else {
-                                Style::default().fg(theme.name_inactive)
-                            },
-                        ),
-                    ];
-                    if ws.info.ephemeral {
-                        left.push(Span::styled(
-                            " [PR]",
-                            Style::default().fg(app.theme.palette.info),
-                        ));
-                    }
-                    if sig.has_idle {
-                        left.push(Span::styled(
-                            " ●",
-                            Style::default()
-                                .fg(app.theme.status.needs_you)
-                                .add_modifier(Modifier::BOLD),
-                        ));
-                    }
-
-                    // Metadata (agent status glyph, changed-file count,
-                    // ahead/behind), shown only when it says something.
-                    // Activity (running) stays in the Agents pane. Placed
-                    // right after the name instead of right-aligned against
-                    // the border — right alignment meant a narrow pane (or a
-                    // long name) pushed it clean off the visible edge; here
-                    // it's always the next thing rendered, so it survives
-                    // any pane width down to the name itself getting cut.
-                    let right = right_metadata_spans(
-                        app,
-                        detail_color,
-                        sig.status,
-                        sig.changed,
-                        sig.ahead_behind,
-                    );
-                    let mut spans = left;
-                    if !right.is_empty() {
-                        spans.push(Span::raw(" "));
-                        spans.extend(right);
-                    }
-
-                    let style = if is_selected {
-                        Style::default().bg(sel_bg)
-                    } else {
-                        Style::default()
-                    };
-                    ListItem::new(vec![Line::from(spans)]).style(style)
-                }
-                SidebarItem::GroupHeader { collapsed } => {
-                    let bar = if is_selected {
-                        Span::styled("▎", Style::default().fg(sel_bar_fg))
-                    } else {
-                        Span::raw(" ")
-                    };
-                    let header_style = Style::default()
-                        .fg(theme.name_inactive)
-                        .add_modifier(Modifier::BOLD);
-                    let arrow = if *collapsed { "▸" } else { "▾" };
-                    let spans = vec![
-                        bar,
-                        Span::styled(format!("{} ", arrow), header_style),
-                        Span::styled("pr-review", header_style),
-                    ];
-                    let style = if is_selected {
-                        Style::default().bg(sel_bg)
-                    } else {
-                        Style::default()
-                    };
-                    ListItem::new(vec![Line::from(spans)]).style(style)
-                }
-            }
-        })
-        .collect();
-
-    let list = List::new(items).block(block);
-    frame.render_widget(list, area);
-
-    super::scrollbar::render_vertical(
-        frame,
-        area,
-        scroll_offset,
-        visual_rows.len(),
-        visible_height,
-        app.theme.general.scrollbar_thumb,
-    );
-}
-
-/// The Projects tab of the top-left pane: the same flattened rows the
-/// Projects overlay shows (projects + their expanded members), compacted to
-/// sidebar width. Enter/click expands a project or jumps to / adopts a
-/// member; n/e/d reuse the overlay's editor and delete.
-fn render_projects_pane(frame: &mut Frame, area: Rect, app: &App) {
-    let is_focused = app.active_pane == ActivePane::WorkspaceList;
-    let theme = &app.theme.workspace_list;
-    let sel_bg = if is_focused {
-        theme.selected_bg
-    } else {
-        app.theme.palette.bg2
-    };
-    let sel_bar_fg = if is_focused {
-        app.theme.palette.iris
-    } else {
-        app.theme.palette.fg3
-    };
-
-    let block = Block::default()
-        .title(sidebar_tab_title(app, area))
-        .borders(Borders::ALL)
-        .border_type(ratatui::widgets::BorderType::Rounded)
-        .border_style(pane_border_style(app, ActivePane::WorkspaceList));
-
-    let rows = app.projects_pane_rows();
-    if rows.is_empty() {
-        let lines = vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled(
-                    format!(" [{}]", app.config.get_binding("projects", "new")),
-                    Style::default().fg(app.theme.footer.key),
-                ),
-                Span::styled(" New project", Style::default().fg(theme.empty_text)),
+                Span::styled(" Add repository", desc_style),
             ]),
         ];
         frame.render_widget(Paragraph::new(lines).block(block), area);
         return;
     }
 
-    let selected = app.selected_project_row.min(rows.len() - 1);
+    let visual_rows = app.sidebar_visual_rows();
+    let rollups = rollups(app);
+    // All rows are one line tall; the wheel scrolls the viewport freely and
+    // selection moves pull it along (see `reveal_sidebar_selection`).
     let visible_height = area.height.saturating_sub(2) as usize;
-    let scroll_offset = app.projects_viewport();
+    let scroll_offset = app.sidebar_viewport();
     let inner_w = area.width.saturating_sub(2) as usize;
 
-    let items: Vec<ListItem> = rows
+    let items: Vec<ListItem> = visual_rows
         .iter()
         .skip(scroll_offset)
         .take(visible_height)
-        .enumerate()
-        .map(|(vis_idx, row)| {
-            let row_idx = vis_idx + scroll_offset;
-            let is_selected = row_idx == selected;
+        .map(|slot| {
+            let Some(row_idx) = *slot else {
+                return ListItem::new(vec![Line::from("")]);
+            };
+            let row = &rows[row_idx];
+            let is_selected = row_idx == app.selected_sidebar_row;
+            let detail_color = if is_selected {
+                theme.detail_selected
+            } else {
+                theme.detail_normal
+            };
             let bar = if is_selected {
                 Span::styled("▎", Style::default().fg(sel_bar_fg))
             } else {
                 Span::raw(" ")
             };
-            let spans = match *row {
-                crate::dialog_state::ProjectRow::Project(pi) => {
-                    let p = &app.sidebar_projects[pi];
-                    let open = p.id.is_some_and(|id| app.projects_expanded.contains(&id));
-                    let marker = if open { "▾ " } else { "▸ " };
-                    let count = format!(" {}", p.members.len());
-                    // bar(1) + marker(2) + dot(2) + trailing count.
-                    let avail = inner_w.saturating_sub(5 + count.chars().count());
+            let chevron = |collapsed: bool| {
+                Span::styled(
+                    format!("{} ", if collapsed { "▸" } else { "▾" }),
+                    header_style,
+                )
+            };
+
+            let spans: Vec<Span> = match row {
+                ProjectTreeRow::Project {
+                    bucket,
+                    key,
+                    collapsed,
+                } => {
+                    let (name, dot_color) = match bucket {
+                        Bucket::Project(pi) => {
+                            let p = &app.sidebar_projects[*pi];
+                            (p.name.clone(), app.theme.projects.color(p.clamped_color()))
+                        }
+                        other => (bucket_label(*other).to_string(), app.theme.palette.fg3),
+                    };
+                    // bar(1) + chevron(2) + dot(2).
+                    let avail = inner_w.saturating_sub(5);
+                    let mut spans = vec![
+                        bar,
+                        chevron(*collapsed),
+                        Span::styled("● ", Style::default().fg(dot_color)),
+                        Span::styled(ellipsize_end(&name, avail), header_style),
+                    ];
+                    // Collapsed: surface what's hidden underneath.
+                    if *collapsed && let Some(sig) = rollups.get(key) {
+                        append_signals(&mut spans, app, detail_color, sig);
+                    }
+                    spans
+                }
+                ProjectTreeRow::Repo { display, depth, .. } => {
+                    let avail = inner_w.saturating_sub(7);
+                    let mut spans = vec![bar];
+                    // A loose repo has no project header above it, so it sits
+                    // one level further out.
+                    if *depth > 0 {
+                        spans.push(Span::raw(" "));
+                    }
+                    spans.extend([
+                        Span::raw("  "),
+                        Span::styled("⎇ ", Style::default().fg(theme.detail_normal)),
+                        Span::styled(
+                            ellipsize_end(display, avail),
+                            Style::default().fg(theme.name_inactive),
+                        ),
+                    ]);
+                    // Nobody has opened this repo yet: say so, and Enter
+                    // adopts it (see `activate_sidebar_row`).
+                    spans.push(Span::styled(
+                        " (not open)",
+                        Style::default().fg(app.theme.palette.fg3),
+                    ));
+                    spans
+                }
+                ProjectTreeRow::Checkout {
+                    workspace_index,
+                    depth,
+                    hoisted,
+                    is_parent,
+                    ..
+                } => {
+                    let ws = &app.workspaces[*workspace_index];
+                    let is_active = *workspace_index == app.active_workspace;
+                    // Icon brightness carries a second signal: the active
+                    // checkout stays at full brightness, the rest recede to a
+                    // muted token — so scanning the list, only where you are
+                    // pops.
+                    let icon_color = if is_selected {
+                        theme.detail_selected
+                    } else if is_active {
+                        theme.detail_normal
+                    } else {
+                        app.theme.palette.fg3
+                    };
+                    // Indent by depth so the type icon lands on the same
+                    // column as the glyph heading this row's level (a
+                    // project's ●). Every row stands alone — nothing nests.
+                    let mut spans =
+                        vec![bar, Span::raw(" ".repeat(*depth as usize)), Span::raw("  ")];
+                    spans.push(Span::styled(
+                        workspace_type_icon(
+                            ws.info.workspace_type,
+                            ws.info.is_git_repo,
+                            ws.info.ephemeral,
+                            *is_parent,
+                        ),
+                        Style::default().fg(icon_color),
+                    ));
+                    spans.push(Span::styled(
+                        checkout_label(ws, *hoisted),
+                        if is_active {
+                            Style::default()
+                                .fg(theme.name_active)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(theme.name_inactive)
+                        },
+                    ));
+                    if ws.info.ephemeral {
+                        spans.push(Span::styled(
+                            " [PR]",
+                            Style::default().fg(app.theme.palette.info),
+                        ));
+                    }
+                    append_signals(&mut spans, app, detail_color, &Signals::of(ws));
+                    spans
+                }
+                ProjectTreeRow::Dir { path, .. } => {
+                    let avail = inner_w.saturating_sub(6);
                     vec![
                         bar,
+                        Span::raw(" "),
+                        Span::styled("🗁 ", Style::default().fg(app.theme.palette.fg3)),
                         Span::styled(
-                            marker,
-                            Style::default()
-                                .fg(theme.name_inactive)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(
-                            "● ",
-                            Style::default().fg(app.theme.projects.color(p.clamped_color())),
-                        ),
-                        Span::styled(
-                            ellipsize_end(&p.name, avail),
-                            Style::default().fg(theme.name_inactive),
-                        ),
-                        Span::styled(count, Style::default().fg(theme.detail_normal)),
-                    ]
-                }
-                crate::dialog_state::ProjectRow::Member(pi, mi) => {
-                    let path = &app.sidebar_projects[pi].members[mi].path;
-                    // Resolve dynamically, like the overlay: a registered
-                    // workspace renders by name (jump on Enter/click), any
-                    // other path is a dimmed directory (adopted on Enter).
-                    let avail = inner_w.saturating_sub(4);
-                    let (text, style) = match app.workspaces.iter().find(|w| w.info.path == *path) {
-                        Some(w) => (
-                            ellipsize_end(&w.info.name, avail),
-                            Style::default().fg(theme.name_inactive),
-                        ),
-                        None => (
                             ellipsize_start(&path.to_string_lossy(), avail),
                             Style::default().fg(app.theme.palette.fg3),
                         ),
-                    };
-                    vec![bar, Span::raw("   "), Span::styled(text, style)]
+                    ]
                 }
             };
+
             let style = if is_selected {
                 Style::default().bg(sel_bg)
             } else {
@@ -649,10 +423,33 @@ fn render_projects_pane(frame: &mut Frame, area: Rect, app: &App) {
         frame,
         area,
         scroll_offset,
-        rows.len(),
+        visual_rows.len(),
         visible_height,
         app.theme.general.scrollbar_thumb,
     );
+}
+
+/// Append the idle dot plus the metadata run (agent status glyph, changed-file
+/// count, ahead/behind) to a row, each only when it says something.
+///
+/// Placed right after the label instead of right-aligned against the border —
+/// right alignment meant a narrow pane (or a long name) pushed it clean off
+/// the visible edge; here it's always the next thing rendered, so it survives
+/// any pane width down to the label itself getting cut.
+fn append_signals(spans: &mut Vec<Span<'static>>, app: &App, detail_color: Color, sig: &Signals) {
+    if sig.has_idle {
+        spans.push(Span::styled(
+            " ●",
+            Style::default()
+                .fg(app.theme.status.needs_you)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    let right = right_metadata_spans(app, detail_color, sig);
+    if !right.is_empty() {
+        spans.push(Span::raw(" "));
+        spans.extend(right);
+    }
 }
 
 /// Bottom-left pane: active AI agents across ALL workspaces.
@@ -774,22 +571,41 @@ mod tests {
         // An ephemeral review checkout is visually distinct regardless of
         // its underlying WorkspaceType, so it never gets mistaken for a
         // regular worktree/project/simple workspace in the sidebar.
-        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true);
+        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true, false);
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Simple, true, false)
+            workspace_type_icon(WorkspaceType::Simple, true, false, false)
         );
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Worktree, true, false)
+            workspace_type_icon(WorkspaceType::Worktree, true, false, false)
         );
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Project, true, false)
+            workspace_type_icon(WorkspaceType::Project, true, false, false)
         );
         assert_eq!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Worktree, true, true)
+            workspace_type_icon(WorkspaceType::Worktree, true, true, false)
+        );
+    }
+
+    #[test]
+    fn parent_icon_reads_apart_from_lone_checkout_and_children() {
+        // The parent's filled disc differs from a lone primary's hollow one
+        // and from a worktree's branch — while staying one cell wide, like
+        // every other row icon.
+        use unicode_width::UnicodeWidthChar;
+        let parent = workspace_type_icon(WorkspaceType::Simple, true, false, true);
+        assert_eq!(parent, "◉ ");
+        assert_eq!('◉'.width(), Some(1));
+        assert_ne!(
+            parent,
+            workspace_type_icon(WorkspaceType::Simple, true, false, false)
+        );
+        assert_ne!(
+            parent,
+            workspace_type_icon(WorkspaceType::Worktree, true, false, false)
         );
     }
 }

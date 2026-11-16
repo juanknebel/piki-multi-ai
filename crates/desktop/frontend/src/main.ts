@@ -9,12 +9,12 @@ import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar, toggleSidebar } from "./components/sidebar";
 import { clearActiveTerminal, initTerminalPanel, openTerminalSearch, toggleLiteralNext } from "./components/terminal-panel";
-import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel } from "./components/web-preview-panel";
-import { installContentRestorer, openProvider } from "./components/open-content";
+import { installContentRestorer, openProvider, openFileInEditor } from "./components/open-content";
+import { offerSkillsIfPending } from "./components/skill-offers";
 import { initDropdownTerminal, toggleDropdownTerminal } from "./components/dropdown-terminal";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
@@ -27,6 +27,7 @@ import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
 import { showWorkspaceDialog } from "./components/dialogs/workspace-dialog";
 import { openWorkspaceSwitcher } from "./components/workspace-switcher";
+import { cycleWorkspace, switchToWorkspace, toggleLastWorkspace } from "./components/workspace-actions";
 import { showMergeDialog } from "./components/dialogs/merge-dialog";
 import { openBranchPicker } from "./components/dialogs/branch-picker";
 import { openFuzzySearch } from "./components/fuzzy-search";
@@ -48,6 +49,7 @@ import { addContextToChat, initChatPanel, initChatResize, toggleChatPanel } from
 import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
 import { initDensity } from "./density";
 import { initTooltips } from "./components/tooltip";
+import { initHomeDir } from "./home-dir";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
@@ -55,6 +57,8 @@ async function init() {
   // The settings document backs every persisted UI preference (sidebar
   // width, shortcuts, pane layouts, …); load it once before anything reads.
   await settingsStore.load();
+  // `~`-abbreviated paths in the chrome (sidebar tooltips, project dialog).
+  await initHomeDir();
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
   // Persisted UI zoom (rem scale + terminal font) — before anything renders.
@@ -68,7 +72,6 @@ async function init() {
   initSidebar();
   const mainContentEl = document.getElementById("main-content")!;
   await initTerminalPanel(mainContentEl);
-  initKanbanPanel(mainContentEl);
   initApiPanel(mainContentEl);
   initMarkdownEditorPanel(mainContentEl);
   initCodeEditorPanel(mainContentEl);
@@ -94,7 +97,7 @@ async function init() {
       appState.setActiveWorkspace(0, detail);
     }
   } catch (err) {
-    reportError("Failed to load workspaces", err);
+    reportError("Failed to load the project tree", err);
   }
 
   // Say what the session daemon brought back, and badge the workspaces the
@@ -103,7 +106,7 @@ async function init() {
     if (rs.sessions === 0) return;
     const n = rs.sessions;
     const m = rs.workspaces.length;
-    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} workspace${m === 1 ? "" : "s"}`, "info");
+    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} checkout${m === 1 ? "" : "s"}`, "info");
     appState.markRestored(rs.workspaces);
   }).catch(() => {});
 
@@ -116,6 +119,13 @@ async function init() {
     }
     ipc.lspNotifyWorkspaceFocus(newIdx, true).catch(() => {});
     lastFocusedWorkspace = newIdx;
+  });
+
+  // A workspace was just created/imported (not the bulk restore at
+  // startup) — offer piki's AGENTS.md skills for it, if anything's
+  // undecided for its repo.
+  appState.on("workspace-added", () => {
+    offerSkillsIfPending(appState.workspaces.length - 1);
   });
 
   ipc.onGitRefresh((event) => {
@@ -139,6 +149,20 @@ async function init() {
   // ones, so here we only update per-tab state.
   ipc.onPtyAgentEvent((event) => {
     appState.applyAgentEvent(event);
+  });
+
+  // `piki-ctl open ...` run inside a tab by whichever agent is in it
+  // (any of them — this rail doesn't care which). Resolve the requesting
+  // tab back to its workspace and open the target the same way the file
+  // tree / fuzzy finder would.
+  ipc.onPtyOpenRequest((event) => {
+    const wsIdx = appState.workspaceIndexForTab(event.tab_id);
+    if (wsIdx < 0) return;
+    if (event.target_kind === "file") {
+      openFileInEditor(wsIdx, event.path);
+    } else {
+      toast(`piki-ctl: unsupported target kind "${event.target_kind}"`, "error");
+    }
   });
   // The backend acknowledged a tab's agent news (the user is looking at it).
   ipc.onPtyAgentAck((event) => {
@@ -191,6 +215,9 @@ async function init() {
   bindAction("merge-rebase", () => showMergeDialog());
   bindAction("switch-branch", () => openBranchPicker());
   bindAction("workspace-switcher", () => openWorkspaceSwitcher());
+  bindAction("workspace-next", () => void cycleWorkspace(1));
+  bindAction("workspace-prev", () => void cycleWorkspace(-1));
+  bindAction("workspace-last", () => void toggleLastWorkspace());
   bindAction("fuzzy-search", () => openFuzzySearch());
   bindAction("project-search", () => openProjectSearch());
   bindAction("terminal-search", () => openTerminalSearch());
@@ -203,7 +230,6 @@ async function init() {
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
   bindAction("jump-attention", () => jumpToAttention());
-  bindAction("kanban", () => void openProvider("Kanban"));
   bindAction("web-preview", () => void openProvider("WebPreview"));
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
@@ -243,13 +269,20 @@ async function init() {
     appState.setActiveTab(next);
   }) as EventListener);
 
+  // Ctrl+Shift+1…9 from the shortcut system: jump to the Nth top-level tab
+  // of the active workspace (tabs, not panes — a tab may hold several).
+  document.addEventListener("switch-ws-tab", ((e: CustomEvent) => {
+    const idx: number = e.detail.index;
+    const ws = appState.activeWs;
+    if (!ws || idx >= ws.wsTabs.length) return;
+    appState.setActiveWsTab(idx);
+  }) as EventListener);
+
   // Alt+1…9 from the shortcut system: jump straight to workspace N.
   document.addEventListener("switch-workspace", ((e: CustomEvent) => {
     const idx: number = e.detail.index;
     if (idx === appState.activeWorkspace || idx >= appState.workspaces.length) return;
-    ipc.switchWorkspace(idx).then((detail) => {
-      appState.setActiveWorkspace(idx, detail);
-    }).catch((err) => reportError("Workspace switch failed", err));
+    void switchToWorkspace(idx);
   }) as EventListener);
 
   // Global keyboard shortcuts — capture phase so they fire before xterm.js

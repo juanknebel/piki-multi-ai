@@ -38,7 +38,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     // ── Header: "/ query" left, counter right ─────────────────────────────
     let header_left = if state.query.is_empty() {
-        " / switch workspace".to_string()
+        " / switch checkout".to_string()
     } else {
         format!(" / {}\u{2588}", state.query)
     };

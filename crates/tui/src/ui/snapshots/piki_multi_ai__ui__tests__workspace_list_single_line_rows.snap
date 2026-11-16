@@ -1,12 +1,11 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 402
 expression: content
 ---
-╭ WORKSPACES │ PROJECTS ───────────────╮
-│   ⎇ nightly 2∆ ↑1 ↓2                 │
-│▎  ⎇ void-setup                       │
-│   ⎇ x220t                            │
+╭ PROJECTS ────────────────────────────╮
+│   ⎇ src-nightly (nightly) 2∆ ↑1 ↓2   │
+│▎  ⎇ src-void-setup (void-setup)      │
+│   ⎇ src-x220t (x220t)                │
 │                                      │
 │                                      │
 │                                      │

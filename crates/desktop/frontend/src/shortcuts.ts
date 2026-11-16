@@ -88,9 +88,16 @@ const shortcuts: ShortcutDef[] = [
   // terminal-safe chords and capture from a focused shell (Ctrl+P/Ctrl+Space
   // were outside-only: bare Ctrl combos are real terminal keystrokes).
   { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+Shift+P", key: "Ctrl+Shift+P", action: () => {}, terminalCapture: true },
-  { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
-  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
+  { id: "new-workspace", label: "Add Repository", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
+  { id: "workspace-switcher", label: "Switch Checkout", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
+  // Checkout navigation without the switcher, in sidebar order (TUI
+  // `prefix }` / `{` / `` ` ``). The bracket pair mirrors the TUI's unshifted
+  // keys; `Alt+`` is the alternate-workspace toggle — some desktop
+  // environments claim it, which is what Settings ▸ Shortcuts is for.
+  { id: "workspace-next", label: "Next Checkout", category: "General", defaultKey: "Alt+]", key: "Alt+]", action: () => {}, terminalCapture: true },
+  { id: "workspace-prev", label: "Previous Checkout", category: "General", defaultKey: "Alt+[", key: "Alt+[", action: () => {}, terminalCapture: true },
+  { id: "workspace-last", label: "Toggle Last Checkout", category: "General", defaultKey: "Alt+`", key: "Alt+`", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
   // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
   // bare Ctrl is not terminal-safe so it stays outside-only — the palette,
@@ -102,7 +109,6 @@ const shortcuts: ShortcutDef[] = [
   // chat-panel.ts addContextToChat(): a terminal selection goes straight into
   // the composer (select + this chord = two keys), otherwise a chooser opens.
   { id: "add-chat-context", label: "Add Context to Chat", category: "Chat", defaultKey: "Ctrl+Shift+I", key: "Ctrl+Shift+I", action: () => {}, terminalCapture: true },
-  { id: "kanban", label: "Kanban Board", category: "View & Panels", defaultKey: "Alt+K", key: "Alt+K", action: () => {}, terminalCapture: true },
   { id: "web-preview", label: "Open Web Preview", category: "View & Panels", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {}, terminalCapture: true },
   { id: "theme", label: "Theme Settings", category: "View & Panels", defaultKey: "Alt+T", key: "Alt+T", action: () => {}, terminalCapture: true },
   { id: "manage-providers", label: "Manage Providers", category: "View & Panels", defaultKey: "Alt+P", key: "Alt+P", action: () => {}, terminalCapture: true },
@@ -155,17 +161,18 @@ const PASTE_KEY = isMac ? "Ctrl+V" : "Ctrl+Shift+V";
  *  Every row must be a key that actually fires somewhere in the app. */
 const fixedShortcuts: FixedShortcut[] = [
   { category: "General", key: "Esc", label: "Close Dialog / Overlay" },
-  { category: "General", key: "Alt+1…9", label: "Switch to Workspace N" },
+  { category: "General", key: "Alt+1…9", label: "Switch to Checkout N" },
   { category: "Search", key: "Ctrl+H", label: "Request History (in API Explorer)" },
   { category: "Search", key: "Alt+Enter", label: "Open in read-only viewer (in file search; Enter opens an editor tab)" },
   { category: "Git", key: "Ctrl+Enter", label: "Commit (in commit message box)" },
+  { category: "Panes & Tabs", key: "Ctrl+Shift+1…9", label: "Switch to Tab N" },
   { category: "Panes & Tabs", key: "Ctrl+Tab", label: "Next Tab" },
   { category: "Panes & Tabs", key: "Ctrl+Shift+Tab", label: "Previous Tab" },
   { category: "Panes & Tabs", key: "Drag divider", label: "Resize split" },
   { category: "Panes & Tabs", key: "Middle-click tab", label: "Close tab (asks if a process is running)" },
   { category: "Panes & Tabs", key: "Right-click tab", label: "Tab menu (rename, split, move to workspace, close)" },
   { category: "Panes & Tabs", key: "⋯ in tab bar", label: "List every tab of the workspace" },
-  { category: "General", key: "Right-click workspace", label: "Workspace menu (open, agents, info, edit, merge, delete)" },
+  { category: "General", key: "Right-click a row", label: "Row menu (open, agents, info, edit, new branch, merge, delete)" },
   { category: "Terminal", key: COPY_KEY, label: "Copy Selection" },
   { category: "Terminal", key: PASTE_KEY, label: "Paste from Clipboard" },
   { category: "Terminal", key: "Select text", label: "Copy to Clipboard (Settings ▸ Terminal ▸ Copy on select)" },
@@ -178,7 +185,7 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "Code Editor", key: "Ctrl+I", label: "Quick Edit (in file viewer)" },
   { category: "Code Editor", key: "Ctrl+E", label: "Open in $EDITOR (in file viewer / search results)" },
   { category: "Code Editor", key: "Ctrl+S", label: "Save file (in editor)" },
-  { category: "Code Editor", key: "Ctrl+F", label: "Find in file (CodeMirror)" },
+  { category: "Code Editor", key: "Ctrl+F", label: "Find in file (editor tab / file viewer)" },
 ];
 
 /** Keys a rebind may not claim: they belong to a widget or a hardcoded
@@ -188,7 +195,8 @@ const RESERVED_COMBOS: { key: string; label: string }[] = [
   { key: PASTE_KEY, label: "Paste from Clipboard (terminal)" },
   { key: "Ctrl+Tab", label: "Next Tab" },
   { key: "Ctrl+Shift+Tab", label: "Previous Tab" },
-  ...Array.from({ length: 9 }, (_, i) => ({ key: `Alt+${i + 1}`, label: `Switch to Workspace ${i + 1}` })),
+  ...Array.from({ length: 9 }, (_, i) => ({ key: `Alt+${i + 1}`, label: `Switch to Checkout ${i + 1}` })),
+  ...Array.from({ length: 9 }, (_, i) => ({ key: `Ctrl+Shift+${i + 1}`, label: `Switch to Tab ${i + 1}` })),
 ];
 
 export interface HelpItem {
@@ -364,6 +372,15 @@ export function keyMatches(eventKey: string, eventCode: string, key: string): bo
   return KEY_CODES[key]?.includes(eventCode) ?? false;
 }
 
+/** 0-based tab index for a `Ctrl+Shift+N` chord, from the event's PHYSICAL
+ *  key (`Digit1`…`Digit9` / `Numpad1`…`Numpad9`). Shift rewrites the produced
+ *  character — "1" becomes "!" on a US layout and something else again
+ *  elsewhere — so `e.key` cannot be used here. `null` for anything else. */
+export function tabIndexFromCode(code: string): number | null {
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+  return m ? Number(m[1]) - 1 : null;
+}
+
 function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   const c = parseCombo(combo);
   // Printable non-alphanumeric keys (?, {, }, …) may need Shift to produce
@@ -449,6 +466,18 @@ export function handleGlobalKeydown(e: KeyboardEvent) {
     e.stopPropagation();
     const event = new CustomEvent("switch-tab", { detail: { direction: e.shiftKey ? -1 : 1 } });
     document.dispatchEvent(event);
+    return;
+  }
+
+  // Ctrl+Shift+1…9 (Cmd+Shift+1…9 on macOS): jump to the workspace's Nth
+  // top-level tab (not customizable). Matched on the PHYSICAL key: Shift
+  // turns "1" into "!" (and something else again on other layouts), so
+  // `e.key` is useless here — same reason `KEY_CODES` exists for = - 0.
+  const tabIndex = modCtrl(e) && e.shiftKey ? tabIndexFromCode(e.code) : null;
+  if (tabIndex !== null) {
+    e.preventDefault();
+    e.stopPropagation();
+    document.dispatchEvent(new CustomEvent("switch-ws-tab", { detail: { index: tabIndex } }));
     return;
   }
 

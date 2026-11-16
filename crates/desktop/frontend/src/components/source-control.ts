@@ -271,7 +271,7 @@ export function renderSourceControl(container: HTMLElement) {
       const empty = document.createElement("div");
       empty.className = "ui-empty";
       empty.style.padding = "16px 20px";
-      empty.textContent = "No changes in this workspace.";
+      empty.textContent = "No changes in this checkout.";
       container.appendChild(empty);
     }
 
@@ -323,7 +323,7 @@ function renderLocalOriginPlaceholder(container: HTMLElement) {
   empty.style.color = "var(--text-muted)";
   empty.style.lineHeight = "1.5";
   empty.textContent =
-    "Source control is unavailable for local-folder workspaces. Recreate the workspace from a GitHub URL to enable git operations.";
+    "Source control is unavailable for plain local folders. Add the repository from a GitHub URL to enable git operations.";
   container.appendChild(empty);
 }
 

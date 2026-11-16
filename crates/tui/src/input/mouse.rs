@@ -427,13 +427,8 @@ pub(crate) fn handle_mouse_event(
                     // The wheel scrolls the viewport only — the selection
                     // (and the workspace it points at) never moves under it.
                     let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                    if app.sidebar_view == crate::app::SidebarView::Projects {
-                        let max = app.projects_pane_rows().len().saturating_sub(visible);
-                        app.projects_scroll = app.projects_scroll.saturating_sub(3).min(max);
-                    } else {
-                        let max = app.sidebar_visual_rows().len().saturating_sub(visible);
-                        app.sidebar_scroll = app.sidebar_scroll.saturating_sub(3).min(max);
-                    }
+                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                    app.sidebar_scroll = app.sidebar_scroll.saturating_sub(3).min(max);
                 } else if rect_contains(app.agents_area, col, row) {
                     let visible = app.agents_area.height.saturating_sub(2) as usize;
                     let max = app.agent_rows().len().saturating_sub(visible);
@@ -503,13 +498,8 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                    if app.sidebar_view == crate::app::SidebarView::Projects {
-                        let max = app.projects_pane_rows().len().saturating_sub(visible);
-                        app.projects_scroll = (app.projects_scroll + 3).min(max);
-                    } else {
-                        let max = app.sidebar_visual_rows().len().saturating_sub(visible);
-                        app.sidebar_scroll = (app.sidebar_scroll + 3).min(max);
-                    }
+                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                    app.sidebar_scroll = (app.sidebar_scroll + 3).min(max);
                 } else if rect_contains(app.agents_area, col, row) {
                     let visible = app.agents_area.height.saturating_sub(2) as usize;
                     let max = app.agent_rows().len().saturating_sub(visible);
@@ -672,79 +662,47 @@ pub(crate) fn handle_mouse_event(
                 // list itself — click-to-focus everywhere. An empty click
                 // just focuses the list and does nothing else.
                 else if rect_contains(app.ws_list_area, col, row) {
-                    // Tab bar in the top border: Workspaces │ Projects.
-                    if let Some(view) = crate::ui::sidebar::sidebar_tab_hit(app, col, row) {
-                        app.set_sidebar_view(view);
-                        app.active_pane = ActivePane::WorkspaceList;
-                        return None;
-                    }
-                    // Projects tab: a click selects the row and performs its
-                    // Enter action (expand project / jump / adopt member).
-                    if app.sidebar_view == crate::app::SidebarView::Projects {
-                        let inner_y = app.ws_list_area.y + 1;
-                        if row >= inner_y {
-                            let rows = app.projects_pane_rows();
-                            let clicked = (row - inner_y) as usize + app.projects_viewport();
-                            if let Some(target) = rows.get(clicked).copied() {
-                                app.selected_project_row = clicked;
-                                app.active_pane = ActivePane::WorkspaceList;
-                                return super::interaction::activate_project_row(app, target);
-                            }
-                        }
-                        app.active_pane = ActivePane::WorkspaceList;
-                        return None;
-                    }
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
-                        let sidebar_items = app.sidebar_items();
+                        let rows = app.sidebar_rows();
                         let visual_rows = app.sidebar_visual_rows();
-                        // Rows are one line tall; mirror the render's derived scroll
-                        // (walking visual_rows, which may include blank separators).
-                        // Rows are one line tall; mirror the render's viewport.
+                        // Rows are one line tall; mirror the render's viewport
+                        // (walking visual_rows, which includes blank separators).
                         let clicked_visual = (row - inner_y) as usize + app.sidebar_viewport();
                         if let Some(clicked) = visual_rows.get(clicked_visual).copied().flatten()
-                            && let Some(item) = sidebar_items.get(clicked)
+                            && let Some(kind) = rows.get(clicked).cloned()
                         {
                             app.selected_sidebar_row = clicked;
-                            // Chevron glyph occupies the column right after
-                            // the selection rail (see `second_col` in
-                            // ui/sidebar.rs): rail at inner_x, chevron+space
-                            // at inner_x+1..=inner_x+2.
-                            let inner_x = app.ws_list_area.x + 1;
-                            let on_chevron = col == inner_x + 1 || col == inner_x + 2;
-                            match item {
-                                crate::app::SidebarItem::Workspace {
-                                    index,
-                                    collapsed: Some(_),
-                                } if on_chevron => {
-                                    // Chevron hit: toggle the group without
-                                    // switching workspace/focus — collapsing
-                                    // a family you're not looking at shouldn't
-                                    // also jump you into it.
+                            match kind {
+                                crate::app::ProjectTreeRow::Project { .. } => {
+                                    // Headers collapse from anywhere on the row
+                                    // — there is no workspace to switch to, so a
+                                    // plain click has nothing else to do.
                                     app.toggle_selected_group();
                                 }
-                                crate::app::SidebarItem::Workspace { index, .. } => {
-                                    // Anywhere else on the row (including a
-                                    // family parent's own name/metadata) just
-                                    // focuses it — collapsing is chevron-only,
-                                    // so a plain click never hides what you
-                                    // just clicked on.
-                                    app.selected_workspace = *index;
-                                    app.switch_workspace(*index);
+                                crate::app::ProjectTreeRow::Repo { root, .. } => {
+                                    // An unopened repo adopts on click, like a
+                                    // directory row (see `activate_sidebar_row`).
+                                    app.active_pane = ActivePane::WorkspaceList;
+                                    return Some(Action::ProjectAdoptDirectory { path: root });
+                                }
+                                crate::app::ProjectTreeRow::Checkout {
+                                    workspace_index, ..
+                                } => {
+                                    app.selected_workspace = workspace_index;
+                                    app.switch_workspace(workspace_index);
                                     if app
                                         .workspaces
-                                        .get(*index)
+                                        .get(workspace_index)
                                         .is_some_and(|ws| ws.review_broken)
                                     {
                                         app.active_pane = ActivePane::MainPanel;
-                                        return Some(Action::RetryReviewCheckout(*index));
+                                        return Some(Action::RetryReviewCheckout(workspace_index));
                                     }
                                 }
-                                // Synthetic pr-review header — any click
-                                // just toggles collapse, mirroring a
-                                // worktree-family parent's chevron.
-                                crate::app::SidebarItem::GroupHeader { .. } => {
-                                    app.toggle_selected_group();
+                                crate::app::ProjectTreeRow::Dir { path, .. } => {
+                                    app.active_pane = ActivePane::WorkspaceList;
+                                    return Some(Action::ProjectAdoptDirectory { path });
                                 }
                             }
                         }
@@ -963,7 +921,7 @@ mod tests {
         }
     }
 
-    /// The wheel scrolls the workspace-list viewport — it must not move the
+    /// The wheel scrolls the sidebar viewport — it must not move the
     /// selection, and above all must not switch workspaces.
     #[test]
     fn wheel_over_workspace_list_scrolls_viewport_not_selection() {
@@ -980,6 +938,8 @@ mod tests {
             &mut headless_terminal(),
         );
 
+        // 5 tree rows (one hoisted loose repo per workspace) in a 3-line
+        // viewport, so the 3-line wheel step clamps to 2.
         assert_eq!(app.sidebar_scroll, 2);
         assert_eq!(app.selected_sidebar_row, 0);
         assert_eq!(app.active_workspace, 0);
@@ -1057,9 +1017,9 @@ mod tests {
         assert!(!app.scratch.selection.as_ref().unwrap().active);
     }
 
-    /// Clicking a workspace row still switches, but focus lands on the list.
+    /// Clicking a checkout row still switches, but focus lands on the tree.
     #[test]
-    fn click_workspace_row_switches_and_focuses_list() {
+    fn click_checkout_row_switches_and_focuses_list() {
         let mut app = test_app();
         add_test_workspace(&mut app);
         add_test_workspace(&mut app);
@@ -1067,6 +1027,8 @@ mod tests {
         app.active_pane = ActivePane::MainPanel;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
+        // Rows: [ws-0, ws-1] under the top border (each repo has one checkout,
+        // so both are hoisted and loose), so ws-1 is screen row 1 + 1.
         handle_mouse_event(
             &mut app,
             mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
@@ -1075,6 +1037,82 @@ mod tests {
 
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    /// Clicking a project header collapses it instead of switching anywhere
+    /// — there is no workspace behind a header row.
+    #[test]
+    fn click_project_header_collapses_without_switching() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        let child = add_test_workspace(&mut app);
+        app.workspaces[child].info.source_repo = app.workspaces[0].info.source_repo.clone();
+        app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
+        app.mode = AppMode::Normal;
+        app.active_workspace = 0;
+        app.ws_list_area = Rect::new(0, 0, 30, 10);
+
+        // Rows: [project, ws-0, ws-1]; the header is screen row 1 + 0.
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 1),
+            &mut headless_terminal(),
+        );
+
+        assert_eq!(app.active_workspace, 0, "headers never switch workspace");
+        assert_eq!(app.sidebar_rows().len(), 1, "both checkouts are hidden");
+    }
+
+    /// Clicking an unopened repo row adopts it, like a directory row.
+    #[test]
+    fn click_unopened_repo_row_adopts_it() {
+        let mut app = test_app();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember::repo(
+                std::path::PathBuf::from("/repos/ghost"),
+            )],
+        }];
+        app.mode = AppMode::Normal;
+        app.ws_list_area = Rect::new(0, 0, 30, 10);
+
+        // Rows: [project, repo]; the repo row is screen row 1 + 1.
+        let action = handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
+            &mut headless_terminal(),
+        );
+
+        assert!(
+            matches!(
+                action,
+                Some(crate::input::Action::ProjectAdoptDirectory { ref path })
+                    if path == std::path::Path::new("/repos/ghost")
+            ),
+            "clicking the repo row adopts it: {action:?}"
+        );
     }
 
     /// Clicking the Agents pane focuses it, even on an empty click.

@@ -7,7 +7,7 @@
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, InputState};
-use crate::dialog_state::{DialogState, EditWorkspaceField};
+use crate::dialog_state::DialogState;
 use crate::helpers::{resize_all_ptys, scrollback_max};
 
 // ── Focus movement between panes ──
@@ -114,26 +114,6 @@ pub(crate) fn open_sessions(app: &mut App) -> Option<Action> {
     Some(Action::LoadSessions)
 }
 
-pub(crate) fn open_projects(app: &mut App) -> Option<Action> {
-    // Loaded from storage here, at open time — renders must stay pure. The
-    // list also reloads through this function after every save/delete and
-    // when the edit sub-dialog backs out.
-    let projects = app
-        .storage
-        .projects
-        .as_ref()
-        .map(|s| s.list_projects())
-        .unwrap_or_default();
-    app.active_dialog = Some(DialogState::Projects {
-        projects,
-        selected: 0,
-        expanded: std::collections::HashSet::new(),
-        scroll_offset: 0,
-    });
-    app.mode = AppMode::Projects;
-    None
-}
-
 pub(crate) fn open_logs(app: &mut App) -> Option<Action> {
     app.active_dialog = Some(DialogState::Logs {
         scroll: u16::MAX,
@@ -161,15 +141,11 @@ pub(crate) fn open_workspace_info(app: &mut App) -> Option<Action> {
 pub(crate) fn open_edit_workspace(app: &mut App) -> Option<Action> {
     if !app.workspaces.is_empty() {
         let ws = &app.workspaces[app.selected_workspace];
-        let kanban = ws.kanban_path.clone().unwrap_or_default();
         let prompt = ws.prompt.clone();
         app.active_dialog = Some(DialogState::EditWorkspace {
             target: app.selected_workspace,
-            kanban_cursor: kanban.chars().count(),
-            kanban,
             prompt_cursor: prompt.chars().count(),
             prompt,
-            active_field: EditWorkspaceField::KanbanPath,
         });
         app.mode = AppMode::EditWorkspace;
     }
@@ -177,22 +153,26 @@ pub(crate) fn open_edit_workspace(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
+    open_create_worktree_for(app, app.selected_workspace)
+}
+
+/// Open the Create Worktree dialog against `parent_idx`'s repository. Reached
+/// from the `clone_workspace` chord (the selected workspace) and from the
+/// sidebar's `new_worktree` key on a checkout row.
+pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Option<Action> {
     // Layer 3: the former "Clone workspace" action is now "Create Worktree",
-    // available only when the selected workspace has a GitHub origin.
-    if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+    // available only when the parent workspace has a GitHub origin.
+    if let Some(ws) = app.workspaces.get(parent_idx) {
         match &ws.info.origin {
             piki_core::WorkspaceOrigin::GitHub { .. } => {
-                let kanban = ws.kanban_path.clone().unwrap_or_default();
                 let prompt = ws.prompt.clone();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
-                    parent_idx: app.selected_workspace,
+                    parent_idx,
                     mode: crate::dialog_state::CreateWorktreeMode::ChooseSource,
                     name: String::new(),
                     name_cursor: 0,
                     prompt_cursor: prompt.chars().count(),
                     prompt,
-                    kanban_cursor: kanban.chars().count(),
-                    kanban,
                     active_field: crate::dialog_state::CreateWorktreeField::Name,
                     existing: Vec::new(),
                     existing_selected: 0,
@@ -202,7 +182,7 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
             }
             piki_core::WorkspaceOrigin::Local => {
                 app.status_message =
-                    Some("Create Worktree is available only for GitHub workspaces".into());
+                    Some("New Branch is available only for GitHub repositories".into());
             }
         }
     }
@@ -221,8 +201,6 @@ pub(crate) fn open_new_workspace(app: &mut App) -> Option<Action> {
         desc_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         source: crate::app::NewWorkspaceSource::default(),
         active_field: DialogField::Source,
     });
@@ -236,6 +214,71 @@ pub(crate) fn open_delete_workspace(app: &mut App) -> Option<Action> {
             target: app.selected_workspace,
         });
         app.mode = AppMode::ConfirmDelete;
+    }
+    None
+}
+
+/// Severity at or above which an agent "needs you": waiting for permission,
+/// or idle/done carrying news the user hasn't looked at. Mirrors the
+/// desktop's `ATTENTION_SEVERITY` over `piki_core::cli_agent::status_severity`
+/// (4 / 3) — and the states `ui::actionable_status_view` already surfaces as
+/// a glyph in the sidebar, subtab bar and status bar.
+const ATTENTION_SEVERITY: u8 = 3;
+
+/// Order the agents needing attention: worst first, stable within a severity
+/// so the Agents-pane order is the jump order. Pure — the App-reading half is
+/// `attention_targets`.
+fn order_attention_targets(mut rows: Vec<((usize, usize), u8)>) -> Vec<(usize, usize)> {
+    // Stable, so same-severity rows keep the order `agent_rows()` produced.
+    rows.sort_by_key(|(_, severity)| std::cmp::Reverse(*severity));
+    rows.into_iter().map(|(key, _)| key).collect()
+}
+
+/// Where the jump lands: the worst agent needing attention — or, when the
+/// user is already standing on one of them, the next one down the list
+/// (cyclic), so pressing the chord again walks through everything that needs
+/// them. `None` when nothing does. Pure.
+fn pick_attention_target(
+    targets: &[(usize, usize)],
+    current: Option<(usize, usize)>,
+) -> Option<(usize, usize)> {
+    if targets.is_empty() {
+        return None;
+    }
+    let here = current.and_then(|c| targets.iter().position(|t| *t == c));
+    Some(match here {
+        Some(i) => targets[(i + 1) % targets.len()],
+        None => targets[0],
+    })
+}
+
+/// The (workspace, tab) pairs whose agent needs the user, worst first.
+fn attention_targets(app: &App) -> Vec<(usize, usize)> {
+    let rows = app
+        .agent_rows()
+        .into_iter()
+        .filter_map(|(ws_idx, tab_idx)| {
+            let tab = app.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
+            let (status, attention, _) = tab.cli_agent_snapshot()?;
+            let severity = piki_core::cli_agent::status_severity(status, attention);
+            (severity >= ATTENTION_SEVERITY).then_some(((ws_idx, tab_idx), severity))
+        })
+        .collect();
+    order_attention_targets(rows)
+}
+
+/// Jump to the agent that needs the user (permission first, then unseen
+/// news), cycling through them on repeated presses — the desktop's `Alt+A`.
+/// Looking at the tab is what clears its marker (the event loop acknowledges
+/// the visible tab), so a walk empties the list as it goes.
+pub(crate) fn jump_to_attention(app: &mut App) -> Option<Action> {
+    let targets = attention_targets(app);
+    let current = app
+        .current_workspace()
+        .map(|ws| (app.active_workspace, ws.active_tab));
+    match pick_attention_target(&targets, current) {
+        Some(target) => super::interaction::jump_to_agent(app, target),
+        None => app.set_toast("No agent needs you", crate::app::ToastLevel::Info),
     }
     None
 }
@@ -273,6 +316,62 @@ pub(crate) fn open_chat_panel(app: &mut App) -> Option<Action> {
         return Some(Action::ChatLoadModels);
     }
     None
+}
+
+/// Text currently selected in the active tab's terminal, if any. The
+/// selection is a plain cell rectangle over the rendered screen, so it is
+/// read back through the parser at the tab's scroll position — the same way
+/// the mouse-release copy does.
+fn terminal_selection_text(app: &App) -> Option<String> {
+    let sel = app.selection.as_ref()?;
+    let (sr, sc, er, ec) = sel.normalized();
+    if sr == er && sc == ec {
+        return None;
+    }
+    let tab = app.current_workspace()?.current_tab()?;
+    let parser = tab.pty_parser.as_ref()?;
+    let mut guard = parser.lock();
+    guard.screen_mut().set_scrollback(tab.term_scroll);
+    let text = guard.screen().contents_between(sr, sc, er, ec + 1);
+    guard.screen_mut().set_scrollback(0);
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// Put the terminal selection into the chat composer as a fenced block and
+/// open the panel — the desktop's `Ctrl+Shift+I` with a terminal selection
+/// (select, then the chord: two keys, composer ready).
+pub(crate) fn add_chat_context(app: &mut App) -> Option<Action> {
+    let Some(text) = terminal_selection_text(app) else {
+        app.set_toast(
+            "Select text in the terminal first (drag with the mouse)",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    };
+    let label = app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .map(|tab| tab.display_label().to_string())
+        .unwrap_or_else(|| "terminal".to_string());
+    let block = crate::chat_context::fence_block(
+        &crate::chat_context::ContextKind::Terminal,
+        &label,
+        &text,
+    );
+    push_chat_context(app, block, "Selection added to chat")
+}
+
+/// Append `block` to the chat composer, open the panel and say so. Shared by
+/// every injection entry point.
+pub(crate) fn push_chat_context(app: &mut App, block: String, toast: &str) -> Option<Action> {
+    if block.is_empty() {
+        return None;
+    }
+    app.chat_panel.input = crate::chat_context::append_to_draft(&app.chat_panel.input, &block);
+    app.chat_panel.input_cursor = app.chat_panel.input.chars().count();
+    let action = open_chat_panel(app);
+    app.set_toast(toast.to_string(), crate::app::ToastLevel::Success);
+    action
 }
 
 /// Toggle the global scratch-terminal overlay. Hiding it (from
@@ -335,6 +434,91 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
         }
     }
     None
+}
+
+/// Open the destination picker for moving the active tab to another
+/// workspace — the desktop's *Move to workspace…*.
+///
+/// Only a live terminal or agent tab can move: the process is re-parented
+/// untouched (it keeps the cwd it started in), whereas API / Code
+/// Review / markdown tabs render from the workspace's own state and would be
+/// meaningless elsewhere, and the lazygit tab is pinned to its repo. The
+/// initial shell is refused for the same reason `close_tab` refuses it —
+/// moving it away would leave its workspace with no tabs at all.
+pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.current_workspace() else {
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let tab_idx = ws.active_tab;
+    let tab = ws.tabs.get(tab_idx)?;
+    let movable = tab.pty_session.is_some()
+        && tab.markdown_content.is_none()
+        && matches!(
+            tab.provider,
+            piki_core::AIProvider::Shell | piki_core::AIProvider::Custom(_)
+        );
+    if !movable {
+        app.set_toast(
+            "Only shell and agent tabs can be moved",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    if !tab.closable {
+        app.set_toast(
+            "Cannot move the initial shell tab",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    let targets: Vec<usize> = (0..app.workspaces.len())
+        .filter(|i| *i != app.active_workspace)
+        .collect();
+    if targets.is_empty() {
+        app.set_toast(
+            "No other checkout to move this tab to",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    app.active_dialog = Some(DialogState::MoveTab {
+        tab: tab_idx,
+        targets,
+        selected: 0,
+    });
+    app.mode = AppMode::MoveTab;
+    None
+}
+
+/// Re-spawn the active tab's process after it exited — the desktop's
+/// pane-header *Restart* button. Only an exited PTY tab can be restarted: a
+/// live one has nothing to fix, and an API / markdown tab has no
+/// process at all.
+pub(crate) fn request_restart_tab(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.current_workspace() else {
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let target = ws.active_tab;
+    let pty = ws.tabs.get(target).and_then(|t| t.pty_session.as_ref());
+    match pty {
+        None => {
+            app.set_toast(
+                "This tab has no process to restart",
+                crate::app::ToastLevel::Info,
+            );
+            None
+        }
+        Some(pty) if pty.peek_alive() => {
+            app.set_toast(
+                "This tab is still running — close it first",
+                crate::app::ToastLevel::Info,
+            );
+            None
+        }
+        Some(_) => Some(Action::RestartTab(target)),
+    }
 }
 
 // ── Terminal scrollback ──
@@ -404,6 +588,55 @@ pub(crate) fn term_scroll_bottom(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Scrollback depth of the parser a clear rebuilds, mirroring what
+/// `piki_multiplex::pty::session` gave the original one (1000 rows in
+/// process, 5000 for a daemon-backed tab). `vt100::Parser` takes the capacity
+/// at construction and never hands it back, so a clear has to restate it —
+/// keep these two in step with the multiplexer if they ever change there.
+///
+/// Temporary: the fork owes us a real way to do this
+/// (<https://github.com/juanknebel/piki-vt100/issues/1> — `CSI 3 J` is
+/// unhandled and the capacity is unreadable). Once it lands, this action
+/// erases the scrollback in place and both constants go away.
+const LOCAL_SCROLLBACK: usize = 1000;
+const REMOTE_SCROLLBACK: usize = 5000;
+
+/// Clear the active terminal — screen *and* scrollback — the desktop's
+/// `Ctrl+Shift+K`. The process is untouched: this only drops what the
+/// emulator is holding, so a full-screen program (an agent's TUI, vim)
+/// repaints on its next output.
+pub(crate) fn clear_terminal(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let tab = ws.tabs.get_mut(ws.active_tab)?;
+    let Some(parser) = tab.pty_parser.as_ref() else {
+        app.set_toast(
+            "This tab has no terminal to clear",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    };
+    let scrollback = if tab.pty_session.as_ref().is_some_and(|p| p.is_remote()) {
+        REMOTE_SCROLLBACK
+    } else {
+        LOCAL_SCROLLBACK
+    };
+    {
+        let mut guard = parser.lock();
+        let (rows, cols) = guard.screen().size();
+        // Same move the session layer makes when it replays a restore: a
+        // fresh parser of the current size is the only way to drop the
+        // scrollback today (see the constants above).
+        *guard = vt100::Parser::new(rows, cols, scrollback);
+    }
+    tab.term_scroll = 0;
+    // A selection addresses cells that no longer hold anything.
+    app.selection = None;
+    None
+}
+
 /// Enter terminal scroll mode (`prefix [`). Only meaningful when the current
 /// tab is a real terminal; focus moves to the main panel.
 pub(crate) fn enter_term_scroll(app: &mut App) -> Option<Action> {
@@ -440,7 +673,7 @@ pub(crate) fn exit_term_scroll(app: &mut App) -> Option<Action> {
 /// terminal emulator's own `Ctrl+Shift+*` bindings (e.g. ghostty).
 ///
 /// No-op (with a toast) unless the active tab is actually a live terminal:
-/// searching only makes sense over PTY output, not over a chat, kanban board,
+/// searching only makes sense over PTY output, not over a chat,
 /// markdown viewer, or a "command not found" placeholder — all of which render
 /// in the MainPanel without a `pty_parser`.
 pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
@@ -468,7 +701,7 @@ pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
     let mut dead_session_id: Option<String> = None;
     {
         let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
-            app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+            app.set_toast("Nothing open", crate::app::ToastLevel::Info);
             return None;
         };
         if let Some(idx) = ws
@@ -501,7 +734,7 @@ pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
 
 pub(crate) fn open_rename_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.workspaces.get(app.active_workspace) else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
         return None;
     };
     let Some(tab) = ws.current_tab() else {
@@ -603,5 +836,218 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Add context to the chat ──
+
+    #[test]
+    fn chat_context_without_a_selection_says_what_to_do() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+
+        let action = add_chat_context(&mut app);
+
+        assert!(action.is_none());
+        assert!(app.chat_panel.input.is_empty());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Select text in the terminal first (drag with the mouse)")
+        );
+    }
+
+    #[test]
+    fn chat_context_injects_the_selection_and_opens_the_panel() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        {
+            let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+            parser.lock().process(b"hello world\r\n");
+        }
+        let owner = app.selection_owner_key().expect("a tab to own it");
+        let mut sel = crate::app::Selection::new(0, 0, owner);
+        sel.end_col = 10;
+        sel.active = false;
+        app.selection = Some(sel);
+
+        add_chat_context(&mut app);
+
+        assert!(
+            app.chat_panel.input.contains("hello world"),
+            "composer: {:?}",
+            app.chat_panel.input
+        );
+        assert!(app.chat_panel.input.starts_with("Terminal selection (tab "));
+        assert_eq!(app.mode, AppMode::ChatPanel);
+        assert_eq!(
+            app.chat_panel.input_cursor,
+            app.chat_panel.input.chars().count()
+        );
+    }
+
+    /// A second block lands under the first, not glued to it.
+    #[test]
+    fn chat_context_appends_below_what_is_already_there() {
+        let mut app = test_app();
+        app.chat_panel.input = "look:".to_string();
+
+        push_chat_context(&mut app, "File: a.rs\n```rs\nx\n```\n".to_string(), "ok");
+
+        assert_eq!(app.chat_panel.input, "look:\n\nFile: a.rs\n```rs\nx\n```\n");
+    }
+
+    // ── Clear the terminal ──
+
+    #[test]
+    fn clear_terminal_empties_the_screen_and_resets_the_scroll() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        {
+            let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+            let mut guard = parser.lock();
+            for i in 0..50 {
+                guard.process(format!("line {i}\r\n").as_bytes());
+            }
+            assert!(!guard.screen().contents().trim().is_empty());
+        }
+        app.workspaces[0].tabs[0].term_scroll = 5;
+
+        clear_terminal(&mut app);
+
+        let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+        assert!(
+            parser.lock().screen().contents().trim().is_empty(),
+            "the screen should be empty after a clear"
+        );
+        assert_eq!(app.workspaces[0].tabs[0].term_scroll, 0);
+    }
+
+    #[test]
+    fn clear_terminal_on_a_tab_without_one_toasts() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Api, true, None);
+
+        let action = clear_terminal(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("This tab has no terminal to clear")
+        );
+    }
+
+    // ── Move a tab to another workspace ──
+
+    #[test]
+    fn move_tab_without_a_workspace_toasts() {
+        let mut app = test_app();
+
+        let action = open_move_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("Nothing open"));
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    /// An API / Code Review tab renders from the workspace's own
+    /// state, so there is nothing to re-parent.
+    #[test]
+    fn move_tab_refuses_a_tab_with_no_process() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_test_workspace(&mut app);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Api, true, None);
+
+        let action = open_move_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Only shell and agent tabs can be moved")
+        );
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    // ── Restart an exited tab ──
+
+    /// API / markdown tabs have no process behind them, so the chord
+    /// must say so instead of silently doing nothing.
+    #[test]
+    fn restart_without_a_process_toasts_and_produces_no_action() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0); // no PTY in tests
+
+        let action = request_restart_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("This tab has no process to restart")
+        );
+    }
+
+    #[test]
+    fn restart_without_a_workspace_toasts() {
+        let mut app = test_app();
+
+        let action = request_restart_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("Nothing open"));
+    }
+
+    // ── Jump to the agent needing attention ──
+
+    #[test]
+    fn attention_order_is_worst_first_then_pane_order() {
+        // (workspace, tab) keys with their severity, in Agents-pane order.
+        let rows = vec![
+            ((0, 1), 3), // unseen news
+            ((1, 0), 4), // waiting for permission
+            ((0, 2), 3), // unseen news, later in the pane
+        ];
+
+        assert_eq!(
+            order_attention_targets(rows),
+            vec![(1, 0), (0, 1), (0, 2)],
+            "permission first, then pane order within the same severity"
+        );
+    }
+
+    #[test]
+    fn jump_starts_at_the_worst_agent_and_then_cycles() {
+        let targets = [(1, 0), (0, 1), (0, 2)];
+
+        // Standing somewhere else: land on the worst one.
+        assert_eq!(pick_attention_target(&targets, None), Some((1, 0)));
+        assert_eq!(pick_attention_target(&targets, Some((2, 5))), Some((1, 0)));
+
+        // Standing on one of them: walk to the next, wrapping at the end.
+        assert_eq!(pick_attention_target(&targets, Some((1, 0))), Some((0, 1)));
+        assert_eq!(pick_attention_target(&targets, Some((0, 2))), Some((1, 0)));
+    }
+
+    #[test]
+    fn nothing_needing_attention_has_no_target() {
+        assert_eq!(pick_attention_target(&[], None), None);
+        assert_eq!(pick_attention_target(&[], Some((0, 0))), None);
+    }
+
+    /// Without an agent reporting, the chord must say so rather than move the
+    /// user somewhere at random.
+    #[test]
+    fn jump_with_no_agents_toasts_and_stays_put() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        let before = app.active_workspace;
+
+        jump_to_attention(&mut app);
+
+        assert_eq!(app.active_workspace, before);
+        assert_eq!(app.status_message.as_deref(), Some("No agent needs you"));
     }
 }

@@ -17,12 +17,16 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { callCommand } from "@milkdown/kit/utils";
 import "@milkdown/kit/prose/view/style/prosemirror.css";
+import { applyScroll, trackScroll, type ScrollPos } from "./scroll-memory";
 
 interface MdEditorInstance {
   tabId: string;
   filePath: string;
   element: HTMLDivElement;
   editor: Editor | null;
+  /** Reading position, recorded while the panel is visible — see
+   *  scroll-memory.ts. */
+  scroll: Map<string, ScrollPos>;
 }
 
 const instances = new Map<string, MdEditorInstance>();
@@ -53,10 +57,22 @@ export function getMarkdownEditorFilePath(tabId: string): string | null {
   return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId) ?? null;
 }
 
+/** Milkdown's scroll container: `.ProseMirror` carries the overflow
+ *  (styles/markdown.css), and it exists only once the editor has mounted —
+ *  the file is read asynchronously, so an early unmount finds nothing. */
+function scrollerOf(inst: MdEditorInstance): HTMLElement | null {
+  return inst.element.querySelector<HTMLElement>(".ProseMirror");
+}
+
+/** The ONE way a panel goes invisible. It deliberately does NOT read the
+ *  scroll position — by the time any unmount runs the element may already be
+ *  detached and reporting 0 (see scroll-memory.ts). */
+function hidePanel(inst: MdEditorInstance) {
+  inst.element.style.display = "none";
+}
+
 export function hideMarkdownEditorPanels() {
-  for (const inst of instances.values()) {
-    inst.element.style.display = "none";
-  }
+  for (const inst of instances.values()) hidePanel(inst);
 }
 
 export function destroyMarkdownEditorPanel(tabId: string) {
@@ -86,11 +102,13 @@ export function mountMarkdownEditorInto(tabId: string, host: HTMLElement) {
     host.appendChild(inst.element);
   }
   inst.element.style.display = "flex";
+  // The element has a layout box again, so the scroller will take an offset.
+  applyScroll(scrollerOf(inst), inst.scroll.get("doc"));
 }
 
 export function unmountMarkdownEditor(tabId: string) {
   const inst = instances.get(tabId);
-  if (inst) inst.element.style.display = "none";
+  if (inst) hidePanel(inst);
 }
 
 function getMarkdownFromEditor(editor: Editor): string {
@@ -160,7 +178,11 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
 
   mainContent.appendChild(el);
 
-  const inst: MdEditorInstance = { tabId, filePath, element: el, editor: null };
+  const inst: MdEditorInstance = { tabId, filePath, element: el, editor: null, scroll: new Map() };
+
+  // On the panel root, so it is already listening when milkdown mounts
+  // `.ProseMirror` (the scroller) asynchronously below.
+  trackScroll(el, inst.scroll, (t) => (t.classList.contains("ProseMirror") ? "doc" : null));
 
   const wsIdx = appState.activeWorkspace;
   ipc.readFileContent(wsIdx, filePath).then(async (content) => {

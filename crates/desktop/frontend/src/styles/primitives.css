@@ -156,8 +156,8 @@
   box-shadow: 0 0 10px color-mix(in srgb, var(--error-color) 25%, transparent);
 }
 
-/* A toggle that is currently on: a secondary button fills with the accent
-   (kanban sort / filter), a ghost one just turns accent (file-tree header). */
+/* A toggle that is currently on: a secondary button fills with the accent,
+   a ghost one just turns accent (file-tree header). */
 .ui-btn:where([data-variant="secondary"]).active {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
@@ -248,7 +248,7 @@
 
 /* ── Empty state ─────────────────────────────────── */
 /* Centered muted block: optional icon, title, hint, CTA. Add [data-fill] to
-   take the whole pane (kanban, chat, web preview). */
+   take the whole pane (chat, web preview). */
 .ui-empty {
   display: flex;
   flex-direction: column;

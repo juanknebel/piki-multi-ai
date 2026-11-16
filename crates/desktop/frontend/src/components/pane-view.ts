@@ -321,7 +321,7 @@ function paneTitle(leaf: LeafNode): string {
   if (!leaf.contentId || !ws) return "Empty";
   const c = ws.tabs.find((t) => t.id === leaf.contentId);
   if (c) return contentLabel(c);
-  // Known to the layout but not (yet) to us: a Kanban / API board being
+  // Known to the layout but not (yet) to us: an API board being
   // re-spawned after a restart.
   return "Restoring…";
 }
@@ -398,7 +398,7 @@ function renderChooser(host: HTMLElement, paneId: PaneId) {
 /** The per-workspace empty state, shared by a workspace with no tabs and a
  *  blank pane: "<workspace> · <branch>", then Shell / every configured
  *  provider (the list File ▸ New Tab preloads), then the tools — Web
- *  Preview / Kanban / API — and "Open file…". `open` / `openFile` say where
+ *  Preview / API — and "Open file…". `open` / `openFile` say where
  *  a pick goes (new tab vs. this pane). */
 function renderEmptyState(
   host: HTMLElement,
@@ -419,7 +419,7 @@ function renderEmptyState(
     <div class="pane-chooser-title">${escapeHtml(title)}</div>
     <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>
     <div class="pane-chooser-list pane-chooser-tools"></div>
-    <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch workspace</div>`;
+    <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch checkout</div>`;
   host.appendChild(box);
   const list = box.querySelector<HTMLElement>(".pane-chooser-list")!;
   const tools = box.querySelector<HTMLElement>(".pane-chooser-tools")!;
@@ -483,9 +483,9 @@ function renderWelcome(container: HTMLElement) {
     <div class="welcome-subtitle">Multi-Agent Workspace</div>
     <p>Select a workspace or open a tab to begin.</p>
     <div class="welcome-shortcuts">
-      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("new-workspace")}</span><span class="shortcut-label">New workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("new-workspace")}</span><span class="shortcut-label">Add repository</span></div>
       <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("command-palette")}</span><span class="shortcut-label">Command palette</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("workspace-switcher")}</span><span class="shortcut-label">Switch workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("workspace-switcher")}</span><span class="shortcut-label">Switch checkout</span></div>
       <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("help")}</span><span class="shortcut-label">All shortcuts</span></div>
     </div>
   `;

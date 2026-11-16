@@ -96,7 +96,7 @@ fn remote_pty_echoes_into_its_local_parser() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f1")).unwrap();
     let signal = PtyOutputSignal::new();
-    let mut pty = PtySession::from_attachment(att, false, None, Some(signal));
+    let pty = PtySession::from_attachment(att, false, None, Some(signal));
     assert!(pty.is_remote());
     assert!(pty.peek_alive());
 
@@ -113,7 +113,7 @@ fn remote_pty_echoes_into_its_local_parser() {
 fn dropping_a_remote_pty_detaches_and_the_session_survives() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f2")).unwrap();
-    let mut pty = PtySession::from_attachment(att, false, None, Some(PtyOutputSignal::new()));
+    let pty = PtySession::from_attachment(att, false, None, Some(PtyOutputSignal::new()));
     pty.write(b"persist me\n").unwrap();
     assert!(wait_until(15, || screen_text(&pty).contains("persist me")));
 

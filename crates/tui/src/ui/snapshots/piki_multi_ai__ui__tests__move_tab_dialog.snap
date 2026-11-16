@@ -1,0 +1,19 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+
+
+
+
+
+
+
+
+                ╭ Move Tab to Checkout ────────────────────────╮
+                │  Move Shell to:                              │
+                │                                              │
+                │  > test-ws-1                                 │
+                │                                              │
+                │  [j/k] move  [Enter] move tab  [Esc] cancel  │
+                ╰──────────────────────────────────────────────╯

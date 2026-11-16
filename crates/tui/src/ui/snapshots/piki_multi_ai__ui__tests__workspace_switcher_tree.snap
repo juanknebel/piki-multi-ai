@@ -1,12 +1,11 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 324
 expression: content
 ---
 
 
       ╭───────────────────────────────────────────────────────╮
-      │ / switch workspace                                  2 │
+      │ / switch checkout                                   2 │
       │ ◆ ○ piki-nightly (2)                                  │
       │    ├─ → — Shell                                 shell │
       │    ├─   — Claude                 claude · not started │

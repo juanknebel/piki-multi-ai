@@ -2,27 +2,25 @@
 //! Covered: the confirmations (`ConfirmDelete`, `ConfirmCloseTab`,
 //! `ConfirmQuit`), text dialogs (`NewWorkspace`, `EditWorkspace`), scroll
 //! overlays (`Help`, `About`, `WorkspaceInfo`), and list-navigation dialogs
-//! (`DispatchCardMove`, `Dashboard`, `Logs`, `ImportAgents`, `ManageAgents`,
-//! `ManageProviders`).
+//! (`Dashboard`, `Logs`, `ImportAgents`, `ManageAgents`,
+//! `ManageProviders`, `MoveTab`).
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
 
 use super::dialog::{
-    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_quit_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
-    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_projects_input,
-    handle_sessions_input, handle_workspace_info_input,
+    handle_about_input, handle_broadcast_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input, handle_dashboard_input,
+    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_provider_input,
+    handle_edit_workspace_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
+    handle_move_tab_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_pr_picker_input, handle_projects_input, handle_sessions_input,
+    handle_skill_offers_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{
-    DialogState, EditAgentField, EditProviderField, EditWorkspaceField, NewTabMenu,
-};
+use crate::dialog_state::{DialogState, EditAgentField, EditProviderField, NewTabMenu};
 use crate::log_buffer::LogEntry;
 use crate::test_support::{
     add_terminal_tab, add_test_workspace, key, key_with_mods, test_app, test_app_isolated,
@@ -38,21 +36,35 @@ fn open_confirm_delete(app: &mut App, target: usize) {
     app.active_pane = ActivePane::WorkspaceList;
 }
 
-fn open_edit_workspace(app: &mut App, active_field: EditWorkspaceField) {
+fn open_edit_workspace(app: &mut App) {
     app.mode = AppMode::EditWorkspace;
     app.active_dialog = Some(DialogState::EditWorkspace {
         target: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        active_field,
+    });
+}
+
+fn open_skill_offers(app: &mut App, workspace_idx: usize) {
+    app.mode = AppMode::SkillOffers;
+    app.active_dialog = Some(DialogState::SkillOffers {
+        workspace_idx,
+        skills: piki_core::repo_skills::SKILLS.iter().collect(),
     });
 }
 
 fn open_confirm_close_tab(app: &mut App, target: usize) {
     app.mode = AppMode::ConfirmCloseTab;
     app.active_dialog = Some(DialogState::ConfirmCloseTab { target });
+}
+
+fn open_move_tab(app: &mut App, tab: usize, targets: Vec<usize>) {
+    app.mode = AppMode::MoveTab;
+    app.active_dialog = Some(DialogState::MoveTab {
+        tab,
+        targets,
+        selected: 0,
+    });
 }
 
 fn open_confirm_quit(app: &mut App) {
@@ -96,22 +108,6 @@ fn current_workspace_info_hscroll(app: &App) -> u16 {
     match app.active_dialog {
         Some(DialogState::WorkspaceInfo { hscroll }) => hscroll,
         _ => panic!("not in WorkspaceInfo dialog"),
-    }
-}
-
-fn open_dispatch_card_move(app: &mut App, target: usize, columns: Vec<(String, String)>) {
-    app.mode = AppMode::DispatchCardMove;
-    app.active_dialog = Some(DialogState::DispatchCardMove {
-        target,
-        columns,
-        selected: 0,
-    });
-}
-
-fn current_dispatch_card_selected(app: &App) -> usize {
-    match &app.active_dialog {
-        Some(DialogState::DispatchCardMove { selected, .. }) => *selected,
-        _ => panic!("not in DispatchCardMove dialog"),
     }
 }
 
@@ -223,6 +219,9 @@ fn open_edit_provider(app: &mut App) {
         dispatchable: true,
         agent_dir: String::new(),
         agent_dir_cursor: 0,
+        idle_threshold: String::new(),
+        idle_threshold_cursor: 0,
+        idle_notify: true,
         active_field: EditProviderField::Name,
     });
 }
@@ -254,29 +253,82 @@ fn edit_provider_field_state(app: &App) -> (String, usize, usize, bool) {
     }
 }
 
-fn current_active_field(app: &App) -> EditWorkspaceField {
-    match app.active_dialog {
-        Some(DialogState::EditWorkspace { active_field, .. }) => active_field,
-        _ => panic!("not in EditWorkspace dialog"),
-    }
-}
-
-fn current_edit_buffers(app: &App) -> (String, String) {
+fn current_edit_buffer(app: &App) -> String {
     match &app.active_dialog {
-        Some(DialogState::EditWorkspace { kanban, prompt, .. }) => (kanban.clone(), prompt.clone()),
+        Some(DialogState::EditWorkspace { prompt, .. }) => prompt.clone(),
         _ => panic!("not in EditWorkspace dialog"),
     }
 }
 
-fn current_edit_cursors(app: &App) -> (usize, usize) {
+fn current_edit_cursor(app: &App) -> usize {
     match app.active_dialog {
-        Some(DialogState::EditWorkspace {
-            kanban_cursor,
-            prompt_cursor,
-            ..
-        }) => (kanban_cursor, prompt_cursor),
+        Some(DialogState::EditWorkspace { prompt_cursor, .. }) => prompt_cursor,
         _ => panic!("not in EditWorkspace dialog"),
     }
+}
+
+// ── SkillOffers ───────────────────────────────────────────────────────────
+
+#[test]
+fn skill_offers_yes_emits_accept_and_dismisses() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 2);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('y')));
+
+    let ids: Vec<&'static str> = piki_core::repo_skills::SKILLS
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert!(matches!(
+        action,
+        Some(Action::RespondToSkillOffers { workspace_idx: 2, ref accepted, ref declined })
+            if *accepted == ids && declined.is_empty()
+    ));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn skill_offers_no_emits_decline_and_dismisses() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('n')));
+
+    let ids: Vec<&'static str> = piki_core::repo_skills::SKILLS
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert!(matches!(
+        action,
+        Some(Action::RespondToSkillOffers { workspace_idx: 0, ref accepted, ref declined })
+            if accepted.is_empty() && *declined == ids
+    ));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn skill_offers_escape_cancels_without_recording_a_decision() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn skill_offers_unrelated_key_leaves_dialog_open() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('x')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some());
 }
 
 // ── ConfirmDelete ─────────────────────────────────────────────────────────
@@ -288,7 +340,7 @@ fn confirm_delete_yes_emits_delete_action_and_dismisses() {
 
     let action = handle_confirm_delete_input(&mut app, key(KeyCode::Char('y')));
 
-    assert!(matches!(action, Some(Action::DeleteWorkspace(7, None))));
+    assert!(matches!(action, Some(Action::DeleteWorkspace(7))));
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
     assert_eq!(app.active_pane, ActivePane::WorkspaceList);
@@ -301,7 +353,7 @@ fn confirm_delete_uppercase_y_also_confirms() {
 
     let action = handle_confirm_delete_input(&mut app, key(KeyCode::Char('Y')));
 
-    assert!(matches!(action, Some(Action::DeleteWorkspace(0, None))));
+    assert!(matches!(action, Some(Action::DeleteWorkspace(0))));
     assert!(app.active_dialog.is_none());
 }
 
@@ -328,7 +380,6 @@ fn confirm_delete_no_on_ephemeral_cancels_instead_of_remove_from_list() {
         "o/r#1".to_string(),
         String::new(),
         String::new(),
-        None,
         std::path::PathBuf::from("/tmp/review"),
         std::path::PathBuf::from("/tmp/review"),
     );
@@ -388,78 +439,47 @@ fn confirm_delete_returns_none_when_dialog_not_active() {
 // ── EditWorkspace ─────────────────────────────────────────────────────────
 
 #[test]
-fn edit_workspace_tab_cycles_kanban_to_prompt_to_kanban() {
+fn edit_workspace_char_inserts_into_prompt() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::KanbanPath);
-
-    assert!(handle_edit_workspace_input(&mut app, key(KeyCode::Tab)).is_none());
-    assert_eq!(current_active_field(&app), EditWorkspaceField::Prompt);
-
-    handle_edit_workspace_input(&mut app, key(KeyCode::Tab));
-    assert_eq!(current_active_field(&app), EditWorkspaceField::KanbanPath);
-}
-
-#[test]
-fn edit_workspace_back_tab_cycles_in_reverse() {
-    let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::KanbanPath);
-
-    handle_edit_workspace_input(&mut app, key(KeyCode::BackTab));
-    assert_eq!(current_active_field(&app), EditWorkspaceField::Prompt);
-
-    handle_edit_workspace_input(&mut app, key(KeyCode::BackTab));
-    assert_eq!(current_active_field(&app), EditWorkspaceField::KanbanPath);
-}
-
-#[test]
-fn edit_workspace_char_inserts_into_active_field_only() {
-    let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
 
     for c in "hi".chars() {
         handle_edit_workspace_input(&mut app, key(KeyCode::Char(c)));
     }
 
-    let (kanban, prompt) = current_edit_buffers(&app);
-    assert_eq!(kanban, "");
-    assert_eq!(prompt, "hi");
-    let (_, p_cur) = current_edit_cursors(&app);
-    assert_eq!(p_cur, 2);
+    assert_eq!(current_edit_buffer(&app), "hi");
+    assert_eq!(current_edit_cursor(&app), 2);
 }
 
 #[test]
 fn edit_workspace_backspace_deletes_previous_char() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
     for c in "abc".chars() {
         handle_edit_workspace_input(&mut app, key(KeyCode::Char(c)));
     }
 
     handle_edit_workspace_input(&mut app, key(KeyCode::Backspace));
 
-    let (_, prompt) = current_edit_buffers(&app);
-    assert_eq!(prompt, "ab");
-    let (_, p_cur) = current_edit_cursors(&app);
-    assert_eq!(p_cur, 2);
+    assert_eq!(current_edit_buffer(&app), "ab");
+    assert_eq!(current_edit_cursor(&app), 2);
 }
 
 #[test]
 fn edit_workspace_backspace_at_cursor_zero_is_noop() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
 
     handle_edit_workspace_input(&mut app, key(KeyCode::Backspace));
 
-    let (_, prompt) = current_edit_buffers(&app);
-    assert_eq!(prompt, "");
-    let (_, p_cur) = current_edit_cursors(&app);
-    assert_eq!(p_cur, 0);
+    assert_eq!(current_edit_buffer(&app), "");
+    assert_eq!(current_edit_cursor(&app), 0);
 }
 
 #[test]
-fn edit_workspace_enter_with_empty_kanban_emits_none_kanban_path() {
+fn edit_workspace_enter_emits_prompt_action() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
     for c in "do something".chars() {
         handle_edit_workspace_input(&mut app, key(KeyCode::Char(c)));
     }
@@ -467,9 +487,8 @@ fn edit_workspace_enter_with_empty_kanban_emits_none_kanban_path() {
     let action = handle_edit_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::EditWorkspace(idx, kanban, prompt)) => {
+        Some(Action::EditWorkspace(idx, prompt)) => {
             assert_eq!(idx, 0);
-            assert!(kanban.is_none());
             assert_eq!(prompt, "do something");
         }
         _ => panic!("expected EditWorkspace action"),
@@ -479,27 +498,9 @@ fn edit_workspace_enter_with_empty_kanban_emits_none_kanban_path() {
 }
 
 #[test]
-fn edit_workspace_enter_trims_kanban() {
-    let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::KanbanPath);
-    for c in "  board.json  ".chars() {
-        handle_edit_workspace_input(&mut app, key(KeyCode::Char(c)));
-    }
-
-    let action = handle_edit_workspace_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::EditWorkspace(_, kanban, _)) => {
-            assert_eq!(kanban.as_deref(), Some("board.json"));
-        }
-        _ => panic!("expected EditWorkspace action"),
-    }
-}
-
-#[test]
 fn edit_workspace_esc_dismisses_without_action() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
     for c in "draft".chars() {
         handle_edit_workspace_input(&mut app, key(KeyCode::Char(c)));
     }
@@ -514,7 +515,7 @@ fn edit_workspace_esc_dismisses_without_action() {
 #[test]
 fn edit_workspace_ctrl_g_dismisses_like_esc() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::KanbanPath);
+    open_edit_workspace(&mut app);
 
     let action = handle_edit_workspace_input(
         &mut app,
@@ -549,6 +550,92 @@ fn confirm_close_tab_yes_dismisses_without_panicking_on_empty_workspaces() {
     assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── MoveTab ──────────────────────────────────────────────────────────────
+
+/// Two workspaces, a tab in each; the dialog moves the source's tab into the
+/// destination, follows it there and puts it in front.
+#[test]
+fn move_tab_enter_moves_the_tab_and_follows_it() {
+    let mut app = test_app();
+    add_test_workspace(&mut app); // 0
+    add_test_workspace(&mut app); // 1
+    add_terminal_tab(&mut app, 0);
+    add_terminal_tab(&mut app, 1);
+    app.active_workspace = 0;
+    open_move_tab(&mut app, 0, vec![1]);
+
+    let action = handle_move_tab_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.workspaces[0].tabs.len(), 0);
+    assert_eq!(app.workspaces[1].tabs.len(), 2);
+    assert_eq!(app.active_workspace, 1, "the view follows the tab");
+    assert_eq!(app.workspaces[1].active_tab, 1);
+}
+
+#[test]
+fn move_tab_navigates_the_destination_list() {
+    let mut app = test_app();
+    for _ in 0..3 {
+        add_test_workspace(&mut app);
+    }
+    add_terminal_tab(&mut app, 0);
+    open_move_tab(&mut app, 0, vec![1, 2]);
+
+    handle_move_tab_input(&mut app, key(KeyCode::Char('j')));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 1, .. })
+    ));
+    // Clamped at the last row, then back up.
+    handle_move_tab_input(&mut app, key(KeyCode::Down));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 1, .. })
+    ));
+    handle_move_tab_input(&mut app, key(KeyCode::Char('k')));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 0, .. })
+    ));
+}
+
+#[test]
+fn move_tab_esc_dismisses_without_moving() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    add_test_workspace(&mut app);
+    add_terminal_tab(&mut app, 0);
+    open_move_tab(&mut app, 0, vec![1]);
+
+    let action = handle_move_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.workspaces[0].tabs.len(), 1, "the tab stayed put");
+}
+
+/// The tab may be gone by the time Enter lands (its process exited and the
+/// user closed it from elsewhere) — say so instead of panicking.
+#[test]
+fn move_tab_with_a_stale_target_reports_the_failure() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    add_test_workspace(&mut app);
+    open_move_tab(&mut app, 4, vec![1]);
+
+    handle_move_tab_input(&mut app, key(KeyCode::Enter));
+
+    assert!(app.active_dialog.is_none());
+    assert_eq!(
+        app.status_message.as_deref(),
+        Some("Could not move the tab")
+    );
 }
 
 #[test]
@@ -890,86 +977,6 @@ fn workspace_info_returns_none_when_dialog_not_active() {
     assert!(action.is_none());
 }
 
-// ── DispatchCardMove ───────────────────────────────────────────────────
-
-fn sample_columns() -> Vec<(String, String)> {
-    vec![
-        ("todo".to_string(), "To Do".to_string()),
-        ("doing".to_string(), "Doing".to_string()),
-        ("done".to_string(), "Done".to_string()),
-    ]
-}
-
-#[test]
-fn dispatch_card_move_j_advances_selection() {
-    let mut app = test_app();
-    open_dispatch_card_move(&mut app, 0, sample_columns());
-
-    handle_dispatch_card_move_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_dispatch_card_selected(&app), 1);
-}
-
-#[test]
-fn dispatch_card_move_k_decrements_with_floor_clamp() {
-    let mut app = test_app();
-    open_dispatch_card_move(&mut app, 0, sample_columns());
-
-    handle_dispatch_card_move_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(current_dispatch_card_selected(&app), 0);
-}
-
-#[test]
-fn dispatch_card_move_does_not_wrap() {
-    let mut app = test_app();
-    open_dispatch_card_move(&mut app, 0, sample_columns());
-
-    // Walk to end then attempt to advance — should clamp at last
-    for _ in 0..10 {
-        handle_dispatch_card_move_input(&mut app, key(KeyCode::Down));
-    }
-    assert_eq!(current_dispatch_card_selected(&app), 2);
-}
-
-#[test]
-fn dispatch_card_move_enter_emits_delete_with_selected_column() {
-    let mut app = test_app();
-    open_dispatch_card_move(&mut app, 5, sample_columns());
-    handle_dispatch_card_move_input(&mut app, key(KeyCode::Char('j')));
-    handle_dispatch_card_move_input(&mut app, key(KeyCode::Char('j')));
-
-    let action = handle_dispatch_card_move_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::DeleteWorkspace(idx, Some(col_id))) => {
-            assert_eq!(idx, 5);
-            assert_eq!(col_id, "done");
-        }
-        _ => panic!("expected DeleteWorkspace with column"),
-    }
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-    assert_eq!(app.active_pane, ActivePane::WorkspaceList);
-}
-
-#[test]
-fn dispatch_card_move_esc_dismisses_without_action() {
-    let mut app = test_app();
-    open_dispatch_card_move(&mut app, 0, sample_columns());
-
-    let action = handle_dispatch_card_move_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn dispatch_card_move_returns_none_when_dialog_not_active() {
-    let mut app = test_app();
-    let action = handle_dispatch_card_move_input(&mut app, key(KeyCode::Enter));
-    assert!(action.is_none());
-}
-
 // ── Dashboard ──────────────────────────────────────────────────────────
 
 #[test]
@@ -1145,35 +1152,16 @@ fn test_project(id: i64, name: &str, member_paths: &[&str]) -> piki_core::projec
         order: id as u32,
         members: member_paths
             .iter()
-            .map(|p| piki_core::projects::ProjectMember {
-                path: std::path::PathBuf::from(p),
-            })
+            .map(|p| piki_core::projects::ProjectMember::new(std::path::PathBuf::from(p)))
             .collect(),
     }
 }
 
-fn open_projects_dialog(app: &mut App, projects: Vec<piki_core::projects::Project>) {
-    app.mode = AppMode::Projects;
-    app.active_dialog = Some(DialogState::Projects {
-        projects,
-        selected: 0,
-        expanded: std::collections::HashSet::new(),
-        scroll_offset: 0,
-    });
-}
-
-fn projects_selected(app: &App) -> usize {
-    match &app.active_dialog {
-        Some(DialogState::Projects { selected, .. }) => *selected,
-        _ => panic!("not in Projects dialog"),
-    }
-}
-
-fn projects_expanded(app: &App) -> std::collections::HashSet<i64> {
-    match &app.active_dialog {
-        Some(DialogState::Projects { expanded, .. }) => expanded.clone(),
-        _ => panic!("not in Projects dialog"),
-    }
+/// Open the project editor the way the sidebar tree does: `None` creates,
+/// `Some(project)` edits. There is no list dialog any more — the tree is the
+/// list — so these tests drive the editor directly.
+fn open_project_editor(app: &mut App, project: Option<piki_core::projects::Project>) {
+    crate::input::dialog::open_project_editor_modal(app, project);
 }
 
 fn project_edit_field(app: &App) -> crate::dialog_state::ProjectEditField {
@@ -1184,121 +1172,12 @@ fn project_edit_field(app: &App) -> crate::dialog_state::ProjectEditField {
 }
 
 #[test]
-fn projects_esc_dismisses() {
-    let mut app = test_app();
-    open_projects_dialog(&mut app, vec![test_project(1, "alpha", &[])]);
-
-    let action = handle_projects_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn projects_nav_moves_and_clamps() {
-    let mut app = test_app();
-    open_projects_dialog(
-        &mut app,
-        vec![test_project(1, "alpha", &[]), test_project(2, "beta", &[])],
-    );
-
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(projects_selected(&app), 1);
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(projects_selected(&app), 1, "clamps at the last row");
-    handle_projects_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(projects_selected(&app), 0);
-    handle_projects_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(projects_selected(&app), 0, "clamps at the first row");
-}
-
-#[test]
-fn projects_enter_toggles_expand_and_members_join_the_rows() {
-    let mut app = test_app();
-    open_projects_dialog(
-        &mut app,
-        vec![test_project(1, "alpha", &["/tmp/a", "/tmp/b"])],
-    );
-
-    handle_projects_input(&mut app, key(KeyCode::Enter));
-    assert!(projects_expanded(&app).contains(&1));
-
-    // The two member rows are now navigable below the project row.
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(projects_selected(&app), 2);
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(projects_selected(&app), 2, "clamps past the last member");
-
-    // Enter on the project row again collapses it.
-    handle_projects_input(&mut app, key(KeyCode::Char('k')));
-    handle_projects_input(&mut app, key(KeyCode::Char('k')));
-    handle_projects_input(&mut app, key(KeyCode::Enter));
-    assert!(projects_expanded(&app).is_empty());
-}
-
-#[test]
-fn projects_enter_on_a_workspace_member_jumps_and_closes() {
-    let mut app = test_app();
-    let ws = add_test_workspace(&mut app); // path is /tmp/test
-    open_projects_dialog(&mut app, vec![test_project(1, "alpha", &["/tmp/test"])]);
-
-    handle_projects_input(&mut app, key(KeyCode::Enter)); // expand
-    handle_projects_input(&mut app, key(KeyCode::Char('j'))); // onto the member
-    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
-
-    assert!(action.is_none(), "registered workspace: jump, no action");
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-    assert_eq!(app.active_workspace, ws);
-}
-
-#[test]
-fn projects_enter_on_a_directory_member_adopts_and_closes() {
+fn project_new_opens_an_empty_editor_listing_workspaces_unchecked() {
     let mut app = test_app();
     add_test_workspace(&mut app);
-    open_projects_dialog(
-        &mut app,
-        vec![test_project(1, "alpha", &["/tmp/elsewhere"])],
-    );
+    open_project_editor(&mut app, None);
 
-    handle_projects_input(&mut app, key(KeyCode::Enter)); // expand
-    handle_projects_input(&mut app, key(KeyCode::Char('j'))); // onto the member
-    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
-
-    assert!(matches!(
-        action,
-        Some(Action::ProjectAdoptDirectory { ref path })
-            if path == &std::path::PathBuf::from("/tmp/elsewhere")
-    ));
-    assert!(app.active_dialog.is_none());
-}
-
-#[test]
-fn projects_delete_returns_the_action_for_the_selected_project() {
-    let mut app = test_app();
-    open_projects_dialog(
-        &mut app,
-        vec![test_project(1, "alpha", &[]), test_project(2, "beta", &[])],
-    );
-
-    handle_projects_input(&mut app, key(KeyCode::Char('j')));
-    let action = handle_projects_input(&mut app, key(KeyCode::Char('d')));
-
-    assert!(matches!(action, Some(Action::DeleteProject(2))));
-}
-
-#[test]
-fn projects_new_opens_an_empty_editor_listing_workspaces_unchecked() {
-    let mut app = test_app();
-    add_test_workspace(&mut app);
-    open_projects_dialog(&mut app, Vec::new());
-
-    let action = handle_projects_input(&mut app, key(KeyCode::Char('n')));
-
-    assert!(action.is_none());
-    assert_eq!(app.mode, AppMode::Projects, "same modal, second variant");
+    assert_eq!(app.mode, AppMode::Projects);
     let Some(DialogState::ProjectEdit {
         editing_id,
         ref name,
@@ -1318,15 +1197,13 @@ fn projects_new_opens_an_empty_editor_listing_workspaces_unchecked() {
 }
 
 #[test]
-fn projects_edit_prefills_saved_members_first_then_workspaces() {
+fn project_edit_prefills_saved_members_first_then_workspaces() {
     let mut app = test_app();
     add_test_workspace(&mut app); // /tmp/test
-    open_projects_dialog(
+    open_project_editor(
         &mut app,
-        vec![test_project(7, "alpha", &["/tmp/plain-dir", "/tmp/test"])],
+        Some(test_project(7, "alpha", &["/tmp/plain-dir", "/tmp/test"])),
     );
-
-    handle_projects_input(&mut app, key(KeyCode::Char('e')));
 
     let Some(DialogState::ProjectEdit {
         editing_id,
@@ -1359,8 +1236,7 @@ fn projects_edit_prefills_saved_members_first_then_workspaces() {
 fn project_edit_tab_cycles_fields() {
     use crate::dialog_state::ProjectEditField;
     let mut app = test_app();
-    open_projects_dialog(&mut app, Vec::new());
-    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    open_project_editor(&mut app, None);
 
     assert_eq!(project_edit_field(&app), ProjectEditField::Name);
     handle_projects_input(&mut app, key(KeyCode::Tab));
@@ -1376,8 +1252,7 @@ fn project_edit_tab_cycles_fields() {
 #[test]
 fn project_edit_color_arrows_move_over_the_palette() {
     let mut app = test_app();
-    open_projects_dialog(&mut app, Vec::new());
-    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    open_project_editor(&mut app, None);
     handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
 
     let color = |app: &App| match &app.active_dialog {
@@ -1400,8 +1275,7 @@ fn project_edit_color_arrows_move_over_the_palette() {
 fn project_edit_space_toggles_the_member_under_the_cursor() {
     let mut app = test_app();
     add_test_workspace(&mut app);
-    open_projects_dialog(&mut app, Vec::new());
-    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    open_project_editor(&mut app, None);
     handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
     handle_projects_input(&mut app, key(KeyCode::Tab)); // → Members
 
@@ -1420,11 +1294,10 @@ fn project_edit_space_toggles_the_member_under_the_cursor() {
 fn project_edit_enter_saves_checked_members_keeping_saved_order() {
     let mut app = test_app();
     add_test_workspace(&mut app); // /tmp/test — not yet a member
-    open_projects_dialog(
+    open_project_editor(
         &mut app,
-        vec![test_project(7, "alpha", &["/tmp/plain-dir"])],
+        Some(test_project(7, "alpha", &["/tmp/plain-dir"])),
     );
-    handle_projects_input(&mut app, key(KeyCode::Char('e')));
     // Check the workspace row (row 1, after the saved directory member).
     handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
     handle_projects_input(&mut app, key(KeyCode::Tab)); // → Members
@@ -1449,19 +1322,15 @@ fn project_edit_enter_saves_checked_members_keeping_saved_order() {
         project.members[1].path,
         std::path::PathBuf::from("/tmp/test")
     );
-    // The handler swapped back to the list; the action reloads it.
-    assert!(matches!(
-        app.active_dialog,
-        Some(DialogState::Projects { .. })
-    ));
-    assert_eq!(app.mode, AppMode::Projects);
+    // The editor closed back onto the tree; the action persists and reloads it.
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
 }
 
 #[test]
 fn project_edit_enter_with_an_empty_name_stays_and_toasts() {
     let mut app = test_app();
-    open_projects_dialog(&mut app, Vec::new());
-    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    open_project_editor(&mut app, None);
 
     let action = handle_projects_input(&mut app, key(KeyCode::Enter));
 
@@ -1473,20 +1342,16 @@ fn project_edit_enter_with_an_empty_name_stays_and_toasts() {
 }
 
 #[test]
-fn project_edit_esc_backs_out_to_the_list_without_saving() {
+fn project_edit_esc_returns_to_the_tree_without_saving() {
     let mut app = test_app();
-    open_projects_dialog(&mut app, Vec::new());
-    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    open_project_editor(&mut app, None);
     handle_projects_input(&mut app, key(KeyCode::Char('x'))); // type a name
 
     let action = handle_projects_input(&mut app, key(KeyCode::Esc));
 
     assert!(action.is_none());
-    assert!(matches!(
-        app.active_dialog,
-        Some(DialogState::Projects { .. })
-    ));
-    assert_eq!(app.mode, AppMode::Projects);
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
 }
 
 #[test]
@@ -1824,7 +1689,7 @@ fn manage_providers_returns_none_when_dialog_not_active() {
 // ── EditProvider ───────────────────────────────────────────────────────
 
 #[test]
-fn edit_provider_tab_cycles_eight_fields_forward() {
+fn edit_provider_tab_cycles_ten_fields_forward() {
     let mut app = test_app();
     open_edit_provider(&mut app);
 
@@ -1836,6 +1701,8 @@ fn edit_provider_tab_cycles_eight_fields_forward() {
         EditProviderField::PromptFlag,
         EditProviderField::Dispatchable,
         EditProviderField::AgentDir,
+        EditProviderField::IdleThreshold,
+        EditProviderField::IdleNotify,
         EditProviderField::Name, // wrap
     ];
     for expected in sequence {
@@ -1852,13 +1719,13 @@ fn edit_provider_back_tab_cycles_in_reverse() {
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
     assert_eq!(
         edit_provider_active_field(&app),
-        EditProviderField::AgentDir
+        EditProviderField::IdleNotify
     );
 
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
     assert_eq!(
         edit_provider_active_field(&app),
-        EditProviderField::Dispatchable
+        EditProviderField::IdleThreshold
     );
 }
 
@@ -1962,6 +1829,107 @@ fn edit_provider_dispatchable_arrow_keys_also_toggle() {
     handle_edit_provider_input(&mut app, key(KeyCode::Right));
     let (_, _, _, after_right) = edit_provider_field_state(&app);
     assert_eq!(after_right, initial);
+}
+
+#[test]
+fn edit_provider_idle_threshold_accepts_only_digits() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to IdleThreshold (Tab x8: Name → ... → IdleThreshold)
+    for _ in 0..8 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleThreshold
+    );
+
+    for c in "12a3b".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    match &app.active_dialog {
+        Some(DialogState::EditProvider {
+            idle_threshold,
+            idle_threshold_cursor,
+            ..
+        }) => {
+            assert_eq!(idle_threshold, "123");
+            assert_eq!(*idle_threshold_cursor, 3);
+        }
+        _ => panic!("not in EditProvider dialog"),
+    }
+}
+
+#[test]
+fn edit_provider_idle_notify_space_toggles() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to IdleNotify (Tab x9)
+    for _ in 0..9 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleNotify
+    );
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Char(' ')));
+    match &app.active_dialog {
+        Some(DialogState::EditProvider { idle_notify, .. }) => {
+            assert!(!idle_notify);
+        }
+        _ => panic!("not in EditProvider dialog"),
+    }
+}
+
+#[test]
+fn edit_provider_ctrl_s_persists_idle_config() {
+    // Uses isolated paths because Ctrl+S persists providers.toml to disk.
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_provider(&mut app);
+    // Fill name
+    for c in "idle-pilot".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to Command (Name → Desc → Cmd)
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    for c in "/usr/bin/echo".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to IdleThreshold (Cmd → Args → PromptFormat → Flag → Dispatchable
+    // → AgentDir → IdleThreshold)
+    for _ in 0..6 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleThreshold
+    );
+    for c in "12".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to IdleNotify and switch it off
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    handle_edit_provider_input(&mut app, key(KeyCode::Char(' ')));
+
+    let action = handle_edit_provider_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::ManageProviders);
+    let saved = app
+        .provider_manager
+        .all()
+        .iter()
+        .find(|p| p.name == "idle-pilot")
+        .expect("provider saved")
+        .clone();
+    assert_eq!(saved.idle_threshold_secs, Some(12));
+    assert!(!saved.idle_notify);
 }
 
 #[test]
@@ -2312,23 +2280,11 @@ fn new_tab_agents_esc_returns_to_main() {
 }
 
 #[test]
-fn new_tab_tools_key_1_spawns_kanban() {
+fn new_tab_tools_key_1_opens_pr_picker() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);
 
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
-
-    assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Kanban))));
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn new_tab_tools_key_2_opens_pr_picker() {
-    let mut app = test_app();
-    open_new_tab_tools(&mut app);
-
-    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
 
     assert!(matches!(action, Some(Action::LoadPrList)));
     assert!(matches!(
@@ -2339,22 +2295,22 @@ fn new_tab_tools_key_2_opens_pr_picker() {
 }
 
 #[test]
-fn new_tab_tools_key_3_spawns_api() {
+fn new_tab_tools_key_2_spawns_api() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);
 
-    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('3')));
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
 
     assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Api))));
     assert!(app.active_dialog.is_none());
 }
 
 #[test]
-fn new_tab_tools_key_4_spawns_git() {
+fn new_tab_tools_key_3_spawns_git() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);
 
-    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('4')));
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('3')));
 
     assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Git))));
     assert!(app.active_dialog.is_none());
@@ -2870,273 +2826,169 @@ fn edit_agent_role_returns_none_when_dialog_not_active() {
     assert!(action.is_none());
 }
 
-// ── DispatchAgent ─────────────────────────────────────────────────────────
+// ── Broadcast ─────────────────────────────────────────────────────────────
 //
-// Two-step dialog. Step 0 cycles `agent_idx` through `agents.len() +
-// dispatchable_providers.len()` entries (Left/Right/Tab). Enter on step 0
-// advances to step 1. Step 1 toggles `use_current_ws` via Left/Right/Tab,
-// Enter dispatches an Action::DispatchAgent, Esc returns to step 0.
+// Two-step dialog over the Agents pane rows. Step 0 is a multi-select
+// checklist (j/k/Up/Down move, Space toggles, `a` all/none). Enter advances
+// to step 1. Step 1 types the line, Tab toggles append-Enter, Enter sends a
+// single Action::BroadcastInput (checked rows, or the highlighted row when
+// nothing is checked). Esc backs out one step (or dismisses from step 0).
 
-fn sample_dispatch_agents() -> Vec<(String, String, String)> {
-    vec![
-        (
-            "alpha".to_string(),
-            "Claude Code".to_string(),
-            "role-a".to_string(),
-        ),
-        (
-            "beta".to_string(),
-            "Gemini".to_string(),
-            "role-b".to_string(),
-        ),
-    ]
+fn sample_broadcast_rows() -> Vec<(usize, usize)> {
+    vec![(0, 0), (0, 1), (1, 0)]
 }
 
-fn open_dispatch_agent(
+fn open_broadcast(
     app: &mut App,
-    agents: Vec<(String, String, String)>,
+    rows: Vec<(usize, usize)>,
     step: u8,
-    agent_idx: usize,
-    use_current_ws: bool,
+    cursor: usize,
+    selected: Vec<bool>,
 ) {
-    app.mode = AppMode::DispatchAgent;
-    app.active_dialog = Some(DialogState::DispatchAgent {
-        source_ws: 0,
-        card_id: "CARD-7".to_string(),
-        card_title: "Ship feature".to_string(),
-        card_description: "Implement and test".to_string(),
-        card_priority: flow_core::Priority::High,
-        card_project: "piki".to_string(),
-        agent_idx,
-        agents,
-        additional_prompt: String::new(),
-        additional_prompt_cursor: 0,
+    app.mode = AppMode::Broadcast;
+    app.active_dialog = Some(DialogState::Broadcast {
+        rows,
+        selected,
+        cursor,
+        input: String::new(),
+        input_cursor: 0,
         step,
-        use_current_ws,
+        append_enter: true,
     });
 }
 
-fn current_dispatch_state(app: &App) -> (u8, usize, bool, String) {
+fn broadcast_state(app: &App) -> (u8, usize, Vec<bool>, String, bool) {
     match app.active_dialog {
-        Some(DialogState::DispatchAgent {
+        Some(DialogState::Broadcast {
             step,
-            agent_idx,
-            use_current_ws,
-            ref additional_prompt,
+            cursor,
+            ref selected,
+            ref input,
+            append_enter,
             ..
-        }) => (step, agent_idx, use_current_ws, additional_prompt.clone()),
-        _ => panic!("expected DispatchAgent dialog"),
+        }) => (step, cursor, selected.clone(), input.clone(), append_enter),
+        _ => panic!("expected Broadcast dialog"),
     }
 }
 
 #[test]
-fn dispatch_step0_right_cycles_forward_through_agents_then_providers() {
+fn broadcast_step0_space_toggles_and_advances() {
     let (mut app, _tmp) = test_app_isolated();
-    let provider_count = app.dispatchable_provider_list().len();
-    let agents = sample_dispatch_agents();
-    let agent_count = agents.len();
-    let total = agent_count + provider_count;
-    open_dispatch_agent(&mut app, agents, 0, agent_count - 1, false);
+    let rows = sample_broadcast_rows();
+    open_broadcast(&mut app, rows, 0, 0, vec![false; 3]);
 
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
-    // Crossed the agent/provider boundary
-    assert_eq!(current_dispatch_state(&app).1, agent_count);
+    handle_broadcast_input(&mut app, key(KeyCode::Char(' ')));
+    let (_, cursor, selected, _, _) = broadcast_state(&app);
+    assert_eq!(selected, vec![true, false, false]);
+    assert_eq!(cursor, 1);
 
-    // Wrap-around at the end
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, total - 1, false);
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
-    assert_eq!(current_dispatch_state(&app).1, 0);
+    // `a` checks everything, `a` again clears
+    handle_broadcast_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(broadcast_state(&app).2, vec![true; 3]);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(broadcast_state(&app).2, vec![false; 3]);
 }
 
 #[test]
-fn dispatch_step0_tab_acts_as_right() {
+fn broadcast_step0_j_k_move_with_wrap() {
     let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+    open_broadcast(&mut app, sample_broadcast_rows(), 0, 0, vec![false; 3]);
 
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Tab));
-    assert_eq!(current_dispatch_state(&app).1, 1);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(broadcast_state(&app).1, 1);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(broadcast_state(&app).1, 0);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(broadcast_state(&app).1, 2);
 }
 
 #[test]
-fn dispatch_step0_left_cycles_backward_with_wrap() {
+fn broadcast_step0_enter_advances_esc_dismisses() {
     let (mut app, _tmp) = test_app_isolated();
-    let provider_count = app.dispatchable_provider_list().len();
-    let agents = sample_dispatch_agents();
-    let total = agents.len() + provider_count;
-    open_dispatch_agent(&mut app, agents, 0, 0, false);
+    open_broadcast(&mut app, sample_broadcast_rows(), 0, 0, vec![false; 3]);
 
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Left));
-    // Wraps to last (provider) entry
-    assert_eq!(current_dispatch_state(&app).1, total - 1);
-}
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Enter)).is_none());
+    assert_eq!(broadcast_state(&app).0, 1);
 
-#[test]
-fn dispatch_step0_typed_chars_append_to_additional_prompt() {
-    let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Esc)).is_none());
+    assert_eq!(broadcast_state(&app).0, 0);
 
-    for c in "hi!".chars() {
-        handle_dispatch_agent_input(&mut app, key(KeyCode::Char(c)));
-    }
-
-    let (_, _, _, prompt) = current_dispatch_state(&app);
-    assert_eq!(prompt, "hi!");
-}
-
-#[test]
-fn dispatch_step0_enter_advances_to_step1_without_action() {
-    let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
-
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
-
-    assert!(action.is_none());
-    assert_eq!(current_dispatch_state(&app).0, 1);
-}
-
-#[test]
-fn dispatch_step0_esc_dismisses() {
-    let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
-
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Esc)).is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }
 
 #[test]
-fn dispatch_step1_left_right_tab_toggle_use_current_ws() {
+fn broadcast_step1_typing_tab_and_send() {
     let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, false);
+    open_broadcast(
+        &mut app,
+        sample_broadcast_rows(),
+        1,
+        0,
+        vec![true, false, true],
+    );
 
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
-    assert!(current_dispatch_state(&app).2);
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Left));
-    assert!(!current_dispatch_state(&app).2);
-    handle_dispatch_agent_input(&mut app, key(KeyCode::Tab));
-    assert!(current_dispatch_state(&app).2);
-}
+    for c in "/stop".chars() {
+        handle_broadcast_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert_eq!(broadcast_state(&app).3, "/stop");
 
-#[test]
-fn dispatch_step1_enter_with_agent_dispatches_with_resolved_name_and_role() {
-    let (mut app, _tmp) = test_app_isolated();
-    let agents = sample_dispatch_agents();
-    // Select the second agent (idx=1: "beta", Gemini, role-b)
-    open_dispatch_agent(&mut app, agents, 1, 1, true);
+    // Tab flips append_enter off and on
+    handle_broadcast_input(&mut app, key(KeyCode::Tab));
+    assert!(!broadcast_state(&app).4);
+    handle_broadcast_input(&mut app, key(KeyCode::Tab));
+    assert!(broadcast_state(&app).4);
 
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
-
+    let action = handle_broadcast_input(&mut app, key(KeyCode::Enter));
     match action {
-        Some(Action::DispatchAgent {
-            source_ws,
-            card_id,
-            card_title,
-            card_priority,
-            card_project,
-            provider,
-            agent_name,
-            agent_role,
-            use_current_ws,
-            ..
+        Some(Action::BroadcastInput {
+            targets,
+            text,
+            append_enter,
         }) => {
-            assert_eq!(source_ws, 0);
-            assert_eq!(card_id, "CARD-7");
-            assert_eq!(card_title, "Ship feature");
-            assert_eq!(card_priority, flow_core::Priority::High);
-            assert_eq!(card_project, "piki");
-            assert_eq!(provider, AIProvider::Custom("Gemini".to_string()));
-            assert_eq!(agent_name, Some("beta".to_string()));
-            assert_eq!(agent_role, Some("role-b".to_string()));
-            assert!(use_current_ws);
+            assert_eq!(targets, vec![(0, 0), (1, 0)]);
+            assert_eq!(text, "/stop");
+            assert!(append_enter);
         }
-        other => panic!("expected DispatchAgent action, got {other:?}"),
+        other => panic!("expected BroadcastInput, got {other:?}"),
     }
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }
 
 #[test]
-fn dispatch_step1_enter_with_provider_only_dispatches_without_name_or_role() {
+fn broadcast_step1_enter_with_nothing_checked_sends_to_highlight() {
     let (mut app, _tmp) = test_app_isolated();
-    let agents = sample_dispatch_agents();
-    let agent_count = agents.len();
-    let providers = app.dispatchable_provider_list();
-    let first_provider = providers[0].clone();
-    // Select the first provider entry (idx == agent_count)
-    open_dispatch_agent(&mut app, agents, 1, agent_count, false);
+    open_broadcast(&mut app, sample_broadcast_rows(), 1, 2, vec![false; 3]);
 
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+    for c in "hi".chars() {
+        handle_broadcast_input(&mut app, key(KeyCode::Char(c)));
+    }
 
-    match action {
-        Some(Action::DispatchAgent {
-            provider,
-            agent_name,
-            agent_role,
-            use_current_ws,
-            ..
-        }) => {
-            assert_eq!(provider, first_provider);
-            assert_eq!(agent_name, None);
-            assert_eq!(agent_role, None);
-            assert!(!use_current_ws);
+    match handle_broadcast_input(&mut app, key(KeyCode::Enter)) {
+        Some(Action::BroadcastInput { targets, .. }) => {
+            assert_eq!(targets, vec![(1, 0)]);
         }
-        other => panic!("expected DispatchAgent, got {other:?}"),
+        other => panic!("expected BroadcastInput, got {other:?}"),
     }
 }
 
 #[test]
-fn dispatch_step1_esc_returns_to_step0() {
+fn broadcast_step1_enter_with_empty_input_is_noop() {
     let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, true);
+    open_broadcast(&mut app, sample_broadcast_rows(), 1, 0, vec![true; 3]);
 
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
-
+    let action = handle_broadcast_input(&mut app, key(KeyCode::Enter));
     assert!(action.is_none());
-    let (step, _, use_current_ws, _) = current_dispatch_state(&app);
-    assert_eq!(step, 0);
-    // use_current_ws is NOT reset when going back
-    assert!(use_current_ws);
-}
-
-#[test]
-fn dispatch_step0_with_no_entries_at_all_is_noop() {
-    let (mut app, _tmp) = test_app_isolated();
-    // Drain all providers so total = 0 when agents is also empty
-    let names: Vec<String> = app
-        .provider_manager
-        .all()
-        .iter()
-        .map(|p| p.name.clone())
-        .collect();
-    for name in &names {
-        app.provider_manager.remove(name);
-    }
-    assert_eq!(app.dispatchable_provider_list().len(), 0);
-    open_dispatch_agent(&mut app, vec![], 0, 0, false);
-
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
-
-    assert!(action.is_none());
-    // Dialog still open
-    assert!(matches!(
-        app.active_dialog,
-        Some(DialogState::DispatchAgent { .. })
-    ));
-}
-
-#[test]
-fn dispatch_returns_none_when_dialog_not_active() {
-    let mut app = test_app();
-    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
-    assert!(action.is_none());
+    // Still on step 1
+    assert_eq!(broadcast_state(&app).0, 1);
 }
 
 // ── NewWorkspace dialog (Layer 2 redesign) ────────────────────────────────
 //
-// The dialog has a Source toggle (Local | GitHub) and 6 fields total:
-// Source → Directory → Name → Description → Prompt → KanbanPath.
+// The dialog has a Source toggle (Local | GitHub) and 5 fields total:
+// Source → Directory → Name → Description → Prompt.
 // Enter dispatches either `Action::CreateWorkspace` (Simple type, Local
 // source) or `Action::CreateGithubWorkspace` (GitHub source). Workspace
 // name is auto-derived when the Name field is empty.
@@ -3158,8 +3010,6 @@ fn open_new_workspace(app: &mut App, source: NewWorkspaceSource, active_field: D
         desc_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         source,
         active_field,
     });
@@ -3186,14 +3036,12 @@ fn current_new_workspace_text(app: &App, field: DialogField) -> String {
             ref destination,
             ref desc,
             ref prompt,
-            ref kanban,
             ..
         }) => match field {
             DialogField::Directory => dir.clone(),
             DialogField::Destination => destination.clone(),
             DialogField::Description => desc.clone(),
             DialogField::Prompt => prompt.clone(),
-            DialogField::KanbanPath => kanban.clone(),
             DialogField::Source => panic!("Source field has no text buffer"),
         },
         _ => panic!("expected NewWorkspace dialog"),
@@ -3211,8 +3059,6 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
             ref mut desc_cursor,
             ref mut prompt,
             ref mut prompt_cursor,
-            ref mut kanban,
-            ref mut kanban_cursor,
             ..
         }) => {
             let (buf, cursor) = match field {
@@ -3220,7 +3066,6 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
                 DialogField::Destination => (destination, destination_cursor),
                 DialogField::Description => (desc, desc_cursor),
                 DialogField::Prompt => (prompt, prompt_cursor),
-                DialogField::KanbanPath => (kanban, kanban_cursor),
                 DialogField::Source => return,
             };
             *buf = value.to_string();
@@ -3233,19 +3078,18 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
 // ── Unit tests for the CycleField impl on DialogField ─────────────────────
 
 #[test]
-fn cycle_field_next_visits_all_six_fields() {
+fn cycle_field_next_visits_all_five_fields() {
     let order = [
         DialogField::Source,
         DialogField::Directory,
         DialogField::Destination,
         DialogField::Description,
         DialogField::Prompt,
-        DialogField::KanbanPath,
     ];
     for w in order.windows(2) {
         assert_eq!(w[0].next(), w[1], "next({:?})", w[0]);
     }
-    assert_eq!(DialogField::KanbanPath.next(), DialogField::Source);
+    assert_eq!(DialogField::Prompt.next(), DialogField::Source);
 }
 
 #[test]
@@ -3256,7 +3100,6 @@ fn cycle_field_prev_is_inverse_of_next() {
         DialogField::Destination,
         DialogField::Description,
         DialogField::Prompt,
-        DialogField::KanbanPath,
     ];
     for f in all {
         assert_eq!(f.next().prev(), f, "prev(next({:?}))", f);
@@ -3302,7 +3145,6 @@ fn new_workspace_tab_full_cycle() {
         DialogField::Directory,
         DialogField::Description,
         DialogField::Prompt,
-        DialogField::KanbanPath,
         DialogField::Source,
     ];
     for target in expected {
@@ -3321,7 +3163,6 @@ fn new_workspace_tab_full_cycle_github_includes_destination() {
         DialogField::Destination,
         DialogField::Description,
         DialogField::Prompt,
-        DialogField::KanbanPath,
         DialogField::Source,
     ];
     for target in expected {
@@ -3448,20 +3289,18 @@ fn new_workspace_enter_local_dispatches_create_with_all_fields() {
         .unwrap()
         .to_string_lossy()
         .to_string();
-    open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::KanbanPath);
+    open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Prompt);
     set_new_workspace_buffer(&mut app, DialogField::Directory, &dir_str);
     set_new_workspace_buffer(&mut app, DialogField::Description, "desc");
     set_new_workspace_buffer(&mut app, DialogField::Prompt, "go");
-    set_new_workspace_buffer(&mut app, DialogField::KanbanPath, "kanban.toml");
 
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateWorkspace(name, desc, prompt, kanban, dir_path, ws_type)) => {
+        Some(Action::CreateWorkspace(name, desc, prompt, dir_path, ws_type)) => {
             assert_eq!(name, basename);
             assert_eq!(desc, "desc");
             assert_eq!(prompt, "go");
-            assert_eq!(kanban.as_deref(), Some("kanban.toml"));
             assert_eq!(dir_path, std::path::PathBuf::from(&dir_str));
             assert_eq!(ws_type, WorkspaceType::Simple);
         }
@@ -3487,7 +3326,7 @@ fn new_workspace_enter_local_derives_name_from_folder_basename() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateWorkspace(name, _, _, _, _, ws_type)) => {
+        Some(Action::CreateWorkspace(name, _, _, _, ws_type)) => {
             assert_eq!(name, basename);
             assert_eq!(ws_type, WorkspaceType::Simple);
         }
@@ -3505,7 +3344,7 @@ fn new_workspace_enter_local_expands_tilde() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateWorkspace(_, _, _, _, dir_path, _)) => {
+        Some(Action::CreateWorkspace(_, _, _, dir_path, _)) => {
             assert_eq!(dir_path, std::path::PathBuf::from(&home));
         }
         other => panic!("expected CreateWorkspace, got {other:?}"),
@@ -3527,11 +3366,10 @@ fn new_workspace_enter_github_dispatches_create_github_action() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateGithubWorkspace(name, desc, prompt, kanban, url, dest)) => {
+        Some(Action::CreateGithubWorkspace(name, desc, prompt, url, dest)) => {
             assert_eq!(name, "myrepo");
             assert_eq!(desc, "d");
             assert_eq!(prompt, "p");
-            assert!(kanban.is_none());
             assert_eq!(url, "https://github.com/owner/myrepo.git");
             // open_new_workspace seeds destination with paths.repos_dir() as a hint.
             assert_eq!(dest, app.paths.repos_dir());
@@ -3579,7 +3417,6 @@ fn push_test_ws(app: &mut App, name: &str, origin: WorkspaceOrigin) -> usize {
         name.to_string(),
         String::new(),
         String::new(),
-        None,
         std::path::PathBuf::from("/tmp/test"),
         std::path::PathBuf::from("/tmp/test/parent"),
     );
@@ -3639,7 +3476,7 @@ fn clone_keybinding_on_local_workspace_shows_status_message() {
 }
 
 #[test]
-fn create_worktree_tab_cycles_three_fields() {
+fn create_worktree_tab_cycles_two_fields() {
     let mut app = test_app();
     let idx = push_test_ws(
         &mut app,
@@ -3655,8 +3492,6 @@ fn create_worktree_tab_cycles_three_fields() {
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,
@@ -3664,11 +3499,7 @@ fn create_worktree_tab_cycles_three_fields() {
     });
     app.mode = AppMode::CreateWorktree;
 
-    let cycle = [
-        CreateWorktreeField::Prompt,
-        CreateWorktreeField::KanbanPath,
-        CreateWorktreeField::Name,
-    ];
+    let cycle = [CreateWorktreeField::Prompt, CreateWorktreeField::Name];
     for expected in cycle {
         handle_create_worktree_input(&mut app, key(KeyCode::Tab));
         let actual = match app.active_dialog {
@@ -3696,8 +3527,6 @@ fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,
@@ -3724,7 +3553,6 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
             "gh-parent".into(),
             String::new(),
             String::new(),
-            None,
             parent_repo.clone(),
             parent_repo.clone(),
         );
@@ -3741,8 +3569,6 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
         name_cursor: 0,
         prompt: "do the thing".into(),
         prompt_cursor: 0,
-        kanban: "  ".into(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,
@@ -3753,10 +3579,9 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateWorkspace(name, _, prompt, kanban, dir, ws_type)) => {
+        Some(Action::CreateWorkspace(name, _, prompt, dir, ws_type)) => {
             assert_eq!(name, "feature/x");
             assert_eq!(prompt, "do the thing");
-            assert!(kanban.is_none());
             assert_eq!(dir, parent_repo);
             assert_eq!(ws_type, WorkspaceType::Worktree);
         }
@@ -3783,8 +3608,6 @@ fn create_worktree_esc_steps_back_to_choose_source() {
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,
@@ -3820,8 +3643,6 @@ fn open_choose_source_dialog(app: &mut App, idx: usize) {
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,
@@ -3918,8 +3739,6 @@ fn open_load_existing_dialog(
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: CreateWorktreeField::Name,
         existing,
         existing_selected: 0,
@@ -4275,7 +4094,7 @@ fn paste_into_pr_picker_repo_input_inserts_text() {
 #[test]
 fn paste_into_edit_workspace_prompt_inserts_text() {
     let mut app = test_app();
-    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+    open_edit_workspace(&mut app);
 
     crate::input::handle_paste(&mut app, "pasted prompt");
 
@@ -4296,8 +4115,6 @@ fn paste_into_create_worktree_name_inserts_text() {
         name_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         active_field: crate::dialog_state::CreateWorktreeField::Name,
         existing: Vec::new(),
         existing_selected: 0,

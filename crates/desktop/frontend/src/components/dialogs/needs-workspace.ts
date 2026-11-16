@@ -14,7 +14,7 @@ export function showNeedsWorkspace(why: string) {
     actions: [
       { label: "Cancel", kind: "secondary" },
       {
-        label: "Create Workspace",
+        label: "Add Repository",
         kind: "primary",
         isDefault: true,
         autofocus: true,

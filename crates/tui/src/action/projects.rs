@@ -1,14 +1,12 @@
-//! Project actions backing the Projects overlay (`prefix ctrl-p`): save or
-//! delete a project, and adopt a plain-directory member as a workspace.
-//! Storage calls are plain synchronous SQLite (fast, no spawn_blocking
-//! needed); after every mutation the open overlay's list is reloaded from
-//! storage so it reflects reality.
+//! Project actions behind the sidebar tree: save or delete a project, and
+//! adopt a plain-directory member as a workspace. Storage calls are plain
+//! synchronous SQLite (fast, no spawn_blocking needed); after every mutation
+//! the tree's project list is reloaded from storage so it reflects reality.
 
 use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{App, ToastLevel};
-use crate::dialog_state::DialogState;
 use piki_core::workspace::WorkspaceManager;
 
 pub(super) async fn handle(
@@ -57,7 +55,7 @@ pub(super) async fn handle(
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.to_string_lossy().into_owned());
-            match manager.create_simple(&name, "", "", None, &path).await {
+            match manager.create_simple(&name, "", "", &path).await {
                 Ok(info) => super::workspace::finish_workspace_creation(app, info),
                 Err(e) => app.set_toast(format!("Error: {e}"), ToastLevel::Error),
             }
@@ -67,28 +65,9 @@ pub(super) async fn handle(
     Ok(())
 }
 
-/// Refresh every projects surface from storage after a save/delete, so both
-/// the open overlay and the sidebar's Projects tab show what was actually
-/// persisted. Drops expansion state of projects that no longer exist and
-/// clamps the selections.
+/// Refresh the sidebar tree from storage after a save/delete, so it shows
+/// what was actually persisted and the cursor stays on a row that still
+/// exists.
 fn reload_projects(app: &mut App) {
     app.reload_sidebar_projects();
-    let fresh = app
-        .storage
-        .projects
-        .as_ref()
-        .map(|s| s.list_projects())
-        .unwrap_or_default();
-    if let Some(DialogState::Projects {
-        projects,
-        selected,
-        expanded,
-        ..
-    }) = &mut app.active_dialog
-    {
-        expanded.retain(|id| fresh.iter().any(|p| p.id == Some(*id)));
-        *projects = fresh;
-        let rows = crate::dialog_state::project_rows(projects, expanded);
-        *selected = (*selected).min(rows.len().saturating_sub(1));
-    }
 }

@@ -9,6 +9,7 @@ mod dialog_tests;
 mod editor_input;
 pub(crate) mod fuzzy_common;
 mod fuzzy_input;
+pub(crate) use fuzzy_input::is_markdown;
 mod interaction;
 pub(crate) mod list_nav;
 pub(crate) mod mouse;
@@ -22,20 +23,21 @@ use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
-    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_quit_input, handle_create_worktree_input, handle_dashboard_input,
-    handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
-    handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
-    handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_projects_input,
-    handle_rename_tab_input, handle_sessions_input, handle_workspace_info_input,
+    handle_about_input, handle_broadcast_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input, handle_create_worktree_input,
+    handle_dashboard_input, handle_edit_agent_input, handle_edit_agent_role_input,
+    handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
+    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_manage_providers_input, handle_missing_prereqs_input, handle_move_tab_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
+    handle_projects_input, handle_rename_tab_input, handle_sessions_input,
+    handle_skill_offers_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
-    handle_agents_interaction, handle_api_interaction, handle_kanban_interaction,
-    handle_markdown_interaction, handle_terminal_interaction, handle_workspace_list_interaction,
+    handle_agents_interaction, handle_api_interaction, handle_markdown_interaction,
+    handle_terminal_interaction, handle_workspace_list_interaction,
 };
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
@@ -235,6 +237,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::CreateWorktree => return handle_create_worktree_input(app, key),
         AppMode::NewTab => return handle_new_tab_input(app, key),
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
+        AppMode::MoveTab => return handle_move_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Sessions => return handle_sessions_input(app, key),
@@ -246,14 +249,14 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             return workspace_switcher_input::handle_workspace_switcher_input(app, key);
         }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
+        AppMode::SkillOffers => return handle_skill_offers_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
         AppMode::PrPicker => return handle_pr_picker_input(app, key),
-        AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
+        AppMode::Broadcast => return handle_broadcast_input(app, key),
         AppMode::ManageAgents => return handle_manage_agents_input(app, key),
         AppMode::EditAgent => return handle_edit_agent_input(app, key),
         AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),
         AppMode::ImportAgents => return handle_import_agents_input(app, key),
-        AppMode::DispatchCardMove => return handle_dispatch_card_move_input(app, key),
         AppMode::ManageProviders => return handle_manage_providers_input(app, key),
         AppMode::EditProvider => return handle_edit_provider_input(app, key),
         AppMode::ChatPanel => return chat_input::handle_chat_panel_input(app, key),
@@ -341,7 +344,6 @@ const APP_ACTIONS: &[&str] = &[
     "about",
     "dashboard",
     "sessions",
-    "projects",
     "command_palette",
     "fuzzy_search",
     "project_search",
@@ -349,6 +351,7 @@ const APP_ACTIONS: &[&str] = &[
     "scratch_terminal",
     "quit",
     "manage_agents",
+    "jump_attention",
     "manage_providers",
     "logs",
     "scroll_mode",
@@ -357,6 +360,10 @@ const APP_ACTIONS: &[&str] = &[
     "split_up",
     "split_down",
     "rename_tab",
+    "restart_tab",
+    "move_tab",
+    "clear_terminal",
+    "add_chat_context",
 ];
 
 /// Execute an `[keybindings.app]` action by name.
@@ -397,7 +404,6 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "about" => app_actions::open_about(app),
         "dashboard" => app_actions::open_dashboard(app),
         "sessions" => app_actions::open_sessions(app),
-        "projects" => app_actions::open_projects(app),
         "command_palette" => {
             app.open_command_palette();
             None
@@ -414,6 +420,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "scratch_terminal" => app_actions::toggle_scratch_terminal(app),
         "quit" => app_actions::open_confirm_quit(app),
         "manage_agents" => app_actions::open_manage_agents(app),
+        "jump_attention" => app_actions::jump_to_attention(app),
         "manage_providers" => app_actions::open_manage_providers(app),
         "logs" => app_actions::open_logs(app),
         "scroll_mode" => app_actions::enter_term_scroll(app),
@@ -422,6 +429,10 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "split_up" => app_actions::split_up(app),
         "split_down" => app_actions::split_down(app),
         "rename_tab" => app_actions::open_rename_tab(app),
+        "restart_tab" => app_actions::request_restart_tab(app),
+        "move_tab" => app_actions::open_move_tab(app),
+        "clear_terminal" => app_actions::clear_terminal(app),
+        "add_chat_context" => app_actions::add_chat_context(app),
         _ => None,
     }
 }
@@ -650,12 +661,6 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
-                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
-            {
-                handle_kanban_interaction(app, key)
-            } else if app
-                .current_workspace()
-                .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.markdown_content.is_some())
             {
                 handle_markdown_interaction(app, key)
@@ -664,7 +669,7 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         // When focused, the workspace list is keyboard-navigable (up/down to
-        // move the selection, Enter to switch workspace / toggle a group).
+        // move the selection, Enter to switch workspace / toggle a project).
         // The heavier workspace actions still live behind the prefix.
         ActivePane::WorkspaceList => handle_workspace_list_interaction(app, key),
         ActivePane::Agents => handle_agents_interaction(app, key),

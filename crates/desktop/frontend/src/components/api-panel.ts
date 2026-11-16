@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { getShortcutKey, modCtrl, formatShortcut } from "../shortcuts";
 import type { ApiResponseResult, ApiHistoryEntryDto } from "../ipc";
+import { applyScroll, trackScroll, type ScrollPos } from "./scroll-memory";
 
 interface ApiInstance {
   tabId: string;
@@ -17,6 +18,9 @@ interface ApiInstance {
   searchActive: boolean;
   jqActive: boolean;
   jqFilter: string;
+  /** Where the request editor and the response pane were scrolled, recorded
+   *  while the panel is visible — see scroll-memory.ts. */
+  scroll: Map<string, ScrollPos>;
 }
 
 const instances = new Map<string, ApiInstance>();
@@ -55,6 +59,9 @@ export function mountApiInto(tabId: string, wsIdx: number, host: HTMLElement) {
   }
   inst.wsIdx = wsIdx;
   inst.element.style.display = "flex";
+  // The element has a layout box again, so the scrollers will take an offset.
+  applyScroll(inst.editorEl, inst.scroll.get("editor"));
+  applyScroll(inst.responseEl, inst.scroll.get("response"));
 }
 
 export function unmountApi(tabId: string) {
@@ -124,7 +131,18 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
     searchActive: false,
     jqActive: false,
     jqFilter: "",
+    scroll: new Map(),
   };
+
+  // Recorded while the panel is on screen, never on the way out
+  // (scroll-memory.ts).
+  trackScroll(el, inst.scroll, (t) =>
+    t.classList.contains("api-editor")
+      ? "editor"
+      : t.classList.contains("api-response-body")
+        ? "response"
+        : null,
+  );
 
   // Send button
   el.querySelector(".api-send-btn")!.addEventListener("click", () => sendRequest(inst));

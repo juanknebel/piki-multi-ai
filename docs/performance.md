@@ -183,7 +183,7 @@ the webview renders — so its hot paths are the IPC bridge and the DOM work
 around panes. Phase 16 of the desktop roadmap (2026-08-25) fixed the three
 that showed up in the audit; the invariants below are enforced in code
 (`crates/desktop/src/pty_output.rs` tests, `frontend/src/mount-policy.test.ts`,
-`frontend/src/pty-frame.test.ts`) and documented in `crates/desktop/CLAUDE.md`.
+`frontend/src/pty-frame.test.ts`) and documented in `crates/desktop/AGENTS.md`.
 
 ### Invariants
 

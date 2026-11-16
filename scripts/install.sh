@@ -2,6 +2,7 @@
 set -euo pipefail
 
 BINARY_NAME="piki-multi-ai"
+CTL_BINARY_NAME="piki-ctl"
 DEFAULT_DEST="$HOME/.local/bin"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/piki-multi"
 THEMES_DIR="$CONFIG_DIR/themes"
@@ -10,7 +11,9 @@ usage() {
     echo "Usage: $0 [-d DEST_DIR] [-h]"
     echo ""
     echo "Build piki-multi-ai in release mode and install the binary."
-    echo "Also installs default themes to $THEMES_DIR."
+    echo "Also installs $CTL_BINARY_NAME (the agent-agnostic UI-action CLI any"
+    echo "coding agent in a tab can run — see AGENTS.md) and default themes to"
+    echo "$THEMES_DIR."
     echo ""
     echo "Options:"
     echo "  -d DEST_DIR   Install directory (default: $DEFAULT_DEST)"
@@ -35,6 +38,9 @@ cd "$PROJECT_ROOT"
 echo "Building $BINARY_NAME in release mode..."
 cargo build --release -p agent-multi
 
+echo "Building $CTL_BINARY_NAME in release mode..."
+cargo build --release -p piki-ctl
+
 mkdir -p "$DEST_DIR"
 # Atomic replace via a temp file + rename, NOT an in-place `cp`. The persistent
 # session daemon is this same binary re-invoked as `serve`; it keeps running
@@ -42,13 +48,19 @@ mkdir -p "$DEST_DIR"
 # file is often still in use and an in-place overwrite fails with ETXTBSY
 # ("Text file busy"). Renaming onto the path swaps in a fresh inode: the running
 # daemon keeps its old (now-unlinked) inode, the next launch picks up the new
-# binary, and no session has to be killed to upgrade.
-TMP_BIN="$DEST_DIR/.$BINARY_NAME.new.$$"
-cp "target/release/$BINARY_NAME" "$TMP_BIN"
-chmod +x "$TMP_BIN"
-mv -f "$TMP_BIN" "$DEST_DIR/$BINARY_NAME"
-
-echo "Installed $BINARY_NAME to $DEST_DIR/$BINARY_NAME"
+# binary, and no session has to be killed to upgrade. `piki-ctl` doesn't have
+# that daemon problem, but installing it the same way keeps both binaries
+# consistent and cheap to reason about.
+install_binary() {
+    local name="$1"
+    local tmp="$DEST_DIR/.$name.new.$$"
+    cp "target/release/$name" "$tmp"
+    chmod +x "$tmp"
+    mv -f "$tmp" "$DEST_DIR/$name"
+    echo "Installed $name to $DEST_DIR/$name"
+}
+install_binary "$BINARY_NAME"
+install_binary "$CTL_BINARY_NAME"
 
 # Check if destination is in PATH
 case ":$PATH:" in

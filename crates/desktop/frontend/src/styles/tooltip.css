@@ -12,8 +12,21 @@
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   pointer-events: none;
+  max-width: 420px;
+}
+
+/* First line: what the row is called (name · branch). */
+.custom-tooltip-title {
   white-space: nowrap;
-  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Following lines — the directory, as a rule. Wrapped, never elided: the
+   whole point of hovering a row is to read where it lives, and a path is
+   exactly the string an ellipsis makes useless. */
+.custom-tooltip-line {
+  margin-top: 2px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
 }

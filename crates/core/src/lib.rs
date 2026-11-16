@@ -16,6 +16,7 @@ pub mod preflight;
 pub mod projects;
 pub mod providers;
 pub mod pty;
+pub mod repo_skills;
 pub mod search;
 pub mod shell_env;
 pub mod sound;

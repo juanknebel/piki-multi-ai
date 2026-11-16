@@ -6,17 +6,17 @@ import type {
   Project,
   WorkspaceInfo,
   WorkspaceDetail,
+  WorkspaceListEntry,
   ChangedFile,
   DirEntry,
   PtyOutputEvent,
   PtyExitEvent,
   GitRefreshEvent,
   ToastEvent,
-  KanbanBoard,
 } from "./types";
 
 // Workspace commands
-export function listWorkspaces(): Promise<WorkspaceInfo[]> {
+export function listWorkspaces(): Promise<WorkspaceListEntry[]> {
   return invoke("list_workspaces");
 }
 
@@ -26,7 +26,6 @@ export function createWorkspace(
   prompt: string,
   dir: string,
   wsType: string,
-  kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_workspace", {
     name,
@@ -34,7 +33,6 @@ export function createWorkspace(
     prompt,
     dir,
     wsType,
-    kanbanPath,
   });
 }
 
@@ -44,7 +42,6 @@ export function createGithubWorkspace(
   prompt: string,
   githubUrl: string,
   destinationDir: string,
-  kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_github_workspace", {
     name,
@@ -52,12 +49,33 @@ export function createGithubWorkspace(
     prompt,
     githubUrl,
     destinationDir,
-    kanbanPath,
   });
 }
 
 export function defaultCloneDestination(): Promise<string> {
   return invoke("default_clone_destination");
+}
+
+export interface ExistingWorktreeInfo {
+  path: string;
+  branch: string;
+}
+
+/** Worktrees already on disk for `sourceRepo` (a GitHub-origin workspace's
+ *  `source_repo`) that aren't registered as a workspace yet — the "Load
+ *  Existing Worktree" list in the Create Worktree dialog. */
+export function listWorktrees(sourceRepo: string): Promise<ExistingWorktreeInfo[]> {
+  return invoke("list_worktrees", { sourceRepo });
+}
+
+/** Register an existing worktree directory (from `listWorktrees`) as a new
+ *  workspace, without running `git worktree add`. */
+export function importExistingWorktree(
+  sourceRepo: string,
+  path: string,
+  branch: string,
+): Promise<WorkspaceInfo> {
+  return invoke("import_existing_worktree", { sourceRepo, path, branch });
 }
 
 export function deleteWorkspace(index: number): Promise<void> {
@@ -68,9 +86,8 @@ export function updateWorkspace(
   index: number,
   prompt?: string,
   description?: string,
-  kanbanPath?: string,
 ): Promise<void> {
-  return invoke("update_workspace", { index, prompt, description, kanbanPath });
+  return invoke("update_workspace", { index, prompt, description });
 }
 
 // Worktree-family collapse state (keyed by source_repo path), mirrors the
@@ -83,22 +100,53 @@ export function setCollapsedGroups(groups: string[]): Promise<void> {
   return invoke("set_collapsed_groups", { groups });
 }
 
-/** One visual sidebar row, already grouped by the backend. */
-export type SidebarRow =
-  | { type: "prReviewHeader"; collapsed: boolean; family_key: string }
+/** One row of the sidebar's project tree, already ordered by the backend.
+ *  Mirrors `commands::workspace::ProjectTreeRowDto`. */
+export type ProjectTreeRow =
   | {
-      type: "workspace";
+      type: "project";
+      key: string;
+      collapsed: boolean;
+      /** Workspace indices this row hides while collapsed, so their attention
+       *  signals can roll onto it. Empty when expanded. Decided in core — never
+       *  re-derive it from `source_repo`. */
+      hidden: number[];
+      /** `null` for a synthetic bucket (and for an unsaved project). */
+      project_id: number | null;
+      /** Empty for a bucket — the frontend names those. */
+      name: string;
+      color: number | null;
+      /** Loose repositories get no header row, so never "unassigned" here. */
+      bucket: "project" | "prReview" | "unassigned";
+    }
+  | {
+      type: "repo";
+      root: string;
+      display: string;
+      /** 1 under a project header, 0 for a loose repository. */
+      depth: number;
+    }
+  | {
+      type: "checkout";
       index: number;
-      kind: "standalone" | "parent" | "child";
-      family_key: string | null;
-      collapsed: boolean | null;
-    };
+      kind: "primary" | "worktree";
+      depth: number;
+      /** This row stands in for its whole repository: every git checkout is
+       *  its own row, named after the repository folder (branch alongside).
+       *  `false` only for rows with no repository to name (a plain-directory
+       *  workspace, a PR review). */
+      hoisted: boolean;
+      /** The primary of a repo group with worktree rows beside it — the
+       *  "parent" the tree highlights (`family-parent`). */
+      is_parent: boolean;
+    }
+  | { type: "dir"; path: string };
 
-/** Sidebar rows in render order. The grouping rule (worktree families, the
- *  PR-review group, collapse state) lives in `core::workspace::sidebar_rows`
- *  so this app and the TUI can't drift apart again. */
-export function sidebarRows(): Promise<SidebarRow[]> {
-  return invoke("sidebar_rows");
+/** The sidebar's rows in render order. The grouping rule (which repo a
+ *  checkout belongs to, the synthetic buckets, collapse state) lives in
+ *  `core::projects::tree` so this app and the TUI can't drift apart again. */
+export function projectTree(): Promise<ProjectTreeRow[]> {
+  return invoke("project_tree");
 }
 
 export function switchWorkspace(index: number): Promise<WorkspaceDetail> {
@@ -682,6 +730,25 @@ export function readMarkdownFile(workspaceIdx: number, filePath: string): Promis
   return invoke("read_markdown_file", { workspaceIdx, filePath });
 }
 
+// Repo-skills commands (AGENTS.md skill offers — piki-ctl etc.)
+export interface SkillOffer {
+  id: string;
+  title: string;
+  markdown: string;
+}
+
+export function syncAndListPendingSkillOffers(workspaceIdx: number): Promise<SkillOffer[]> {
+  return invoke("sync_and_list_pending_skill_offers", { workspaceIdx });
+}
+
+export function respondToSkillOffers(
+  workspaceIdx: number,
+  accepted: string[],
+  declined: string[],
+): Promise<void> {
+  return invoke("respond_to_skill_offers", { workspaceIdx, accepted, declined });
+}
+
 // Agent commands
 export interface AgentInfo {
   id: number | null;
@@ -788,20 +855,8 @@ export function dispatchAgent(
   prompt: string,
   createWorktree: boolean,
   wsName?: string,
-  dispatchCardId?: string,
-  dispatchSourceKanban?: string,
-  dispatchAgentName?: string,
-  dispatchCardTitle?: string,
 ): Promise<string> {
-  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName, dispatchCardId, dispatchSourceKanban, dispatchAgentName, dispatchCardTitle });
-}
-
-export function kanbanLoadBoardByPath(boardPath: string): Promise<KanbanBoard> {
-  return invoke("kanban_load_board_by_path", { boardPath });
-}
-
-export function kanbanMoveCardByPath(boardPath: string, cardId: string, toColumnId: string): Promise<void> {
-  return invoke("kanban_move_card_by_path", { boardPath, cardId, toColumnId });
+  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName });
 }
 
 // Log commands
@@ -877,35 +932,6 @@ export interface SysInfoSnapshot {
 
 export function getSysinfoDetailed(): Promise<SysInfoSnapshot> {
   return invoke("get_sysinfo_detailed");
-}
-
-// Kanban commands
-export function kanbanLoadBoard(workspaceIdx: number, sort?: string, projectFilter?: string[]): Promise<KanbanBoard> {
-  return invoke("kanban_load_board", { workspaceIdx, sort: sort ?? null, projectFilter: projectFilter ?? null });
-}
-
-export function kanbanCreateCard(workspaceIdx: number, columnId: string, project: string): Promise<string> {
-  return invoke("kanban_create_card", { workspaceIdx, columnId, project });
-}
-
-export function kanbanUpdateCard(
-  workspaceIdx: number,
-  cardId: string,
-  title: string,
-  description: string,
-  priority: string,
-  assignee: string,
-  project: string,
-): Promise<void> {
-  return invoke("kanban_update_card", { workspaceIdx, cardId, title, description, priority, assignee, project });
-}
-
-export function kanbanMoveCard(workspaceIdx: number, cardId: string, toColumnId: string): Promise<void> {
-  return invoke("kanban_move_card", { workspaceIdx, cardId, toColumnId });
-}
-
-export function kanbanDeleteCard(workspaceIdx: number, cardId: string): Promise<void> {
-  return invoke("kanban_delete_card", { workspaceIdx, cardId });
 }
 
 // Settings commands
@@ -1033,6 +1059,14 @@ export function onPtyAgentEvent(
   );
 }
 
+export function onPtyOpenRequest(
+  callback: (event: import("./types").PtyOpenRequest) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyOpenRequest>("pty-open-request", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onPtyAgentAck(
   callback: (event: import("./types").PtyAgentAckEvent) => void,
 ): Promise<UnlistenFn> {
@@ -1066,6 +1100,8 @@ export interface ProviderDetail {
   prompt_flag: string;
   dispatchable: boolean;
   agent_dir: string | null;
+  idle_threshold_secs: number | null;
+  idle_notify: boolean;
 }
 
 export function listProviders(): Promise<ProviderDetail[]> {
@@ -1162,7 +1198,8 @@ export type ChatAgentEvent =
   | { kind: "tool-calls"; calls: { id: string; name: string; arguments: unknown }[] }
   | { kind: "tool-executing"; name: string }
   | { kind: "tool-result"; tool_call_id: string; name: string; result: string; is_error: boolean }
-  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string };
+  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string }
+  | { kind: "usage"; prompt_tokens: number; completion_tokens: number };
 
 export function onChatAgentEvent(callback: (event: ChatAgentEvent) => void): Promise<UnlistenFn> {
   return listen<ChatAgentEvent>("chat-agent-event", (e) => callback(e.payload));

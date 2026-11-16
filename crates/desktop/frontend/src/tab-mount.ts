@@ -6,7 +6,6 @@
 
 import type { TabInfo } from "./types";
 import { mountTerminalInto, unmountTerminal } from "./components/terminal-panel";
-import { mountKanbanInto, unmountKanban } from "./components/kanban-panel";
 import { mountApiInto, unmountApi } from "./components/api-panel";
 import { mountMarkdownEditorInto, unmountMarkdownEditor } from "./components/markdown-editor-panel";
 import { mountCodeEditorInto, unmountCodeEditor } from "./components/code-editor-panel";
@@ -28,8 +27,6 @@ export interface MountOptions {
 export function mountTab(tab: TabInfo, host: HTMLElement, wsIdx: number, opts: MountOptions = {}) {
   if (isTerminalProvider(tab)) {
     mountTerminalInto(tab.id, host, opts);
-  } else if (tab.provider === "Kanban") {
-    void mountKanbanInto(tab.id, host);
   } else if (tab.provider === "Api") {
     mountApiInto(tab.id, wsIdx, host);
   } else if (tab.provider === "Markdown") {
@@ -45,8 +42,6 @@ export function mountTab(tab: TabInfo, host: HTMLElement, wsIdx: number, opts: M
 export function unmountTab(tab: TabInfo) {
   if (isTerminalProvider(tab)) {
     unmountTerminal(tab.id);
-  } else if (tab.provider === "Kanban") {
-    unmountKanban(tab.id);
   } else if (tab.provider === "Api") {
     unmountApi(tab.id);
   } else if (tab.provider === "Markdown") {

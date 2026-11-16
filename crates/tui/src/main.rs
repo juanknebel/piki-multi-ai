@@ -1,6 +1,7 @@
 mod action;
 mod action_catalog;
 mod app;
+mod chat_context;
 mod clipboard;
 pub(crate) mod code_review;
 mod command_palette;
@@ -62,6 +63,10 @@ enum Commands {
         #[command(subcommand)]
         action: SessionsAction,
     },
+    /// Health check: dependencies, session daemon, database, providers
+    /// file and directory writability. Read-only; exits non-zero when
+    /// something is broken.
+    Doctor,
 }
 
 #[derive(Subcommand)]
@@ -109,7 +114,8 @@ fn main() -> anyhow::Result<()> {
                         &paths.daemon_paths(),
                         *foreground,
                         Some(piki_core::cli_agent::sidecar_config()),
-                    );
+                    )
+                    .map_err(anyhow::Error::from);
                 }
                 #[cfg(not(unix))]
                 {
@@ -119,6 +125,9 @@ fn main() -> anyhow::Result<()> {
             }
             Commands::Sessions { action } => {
                 return run_sessions_cli(&paths, action);
+            }
+            Commands::Doctor => {
+                return run_doctor(&paths);
             }
         }
     }
@@ -160,6 +169,33 @@ fn run_migrate(paths: &piki_core::paths::DataPaths) -> anyhow::Result<()> {
     let count = storage.migrate_from_json(paths)?;
     println!("Migrated {count} workspaces from JSON to SQLite");
     println!("Database: {}", db_path.display());
+    Ok(())
+}
+
+/// The `doctor` subcommand: human-readable health report over
+/// [`piki_core::preflight::run_doctor_checks`]. Prints one line per check
+/// and fails (non-zero exit) only when something is broken — warnings about
+/// missing optional dependencies still exit 0.
+fn run_doctor(paths: &piki_core::paths::DataPaths) -> anyhow::Result<()> {
+    use piki_core::preflight::DoctorStatus;
+    let report = piki_core::preflight::run_doctor_checks(paths);
+    for check in &report.checks {
+        let tag = match check.status {
+            DoctorStatus::Ok => "ok  ",
+            DoctorStatus::Warn => "warn",
+            DoctorStatus::Error => "err ",
+        };
+        println!("[{tag}] {:<10} {}", check.name, check.detail);
+    }
+    println!(
+        "doctor: {} ok, {} warning(s), {} error(s)",
+        report.checks.len() - report.warnings() - report.errors(),
+        report.warnings(),
+        report.errors()
+    );
+    if report.has_errors() {
+        anyhow::bail!("doctor found {} problem(s)", report.errors());
+    }
     Ok(())
 }
 

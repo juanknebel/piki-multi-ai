@@ -8,15 +8,7 @@ import { showNeedsWorkspace } from "./needs-workspace";
 
 // All AI agent providers live in providers.toml — loaded via ipc.listProviders().
 
-export interface CardContext {
-  id: string;
-  title: string;
-  description: string;
-  priority: string;
-  project: string;
-}
-
-export async function showDispatchDialog(cardContext?: CardContext) {
+export async function showDispatchDialog() {
   document.querySelector(".dispatch-backdrop")?.remove();
 
   if (appState.workspaces.length === 0) {
@@ -64,7 +56,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   backdrop.innerHTML = `
     <div class="dialog ui-surface" style="max-width:520px">
       <div class="ui-header">
-        <span class="ui-header-title">Dispatch Agent${cardContext ? ` — ${esc(cardContext.title)}` : ""}</span>
+        <span class="ui-header-title">Dispatch Agent</span>
         <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
@@ -78,7 +70,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Additional prompt</label>
-          <textarea class="ui-input" id="dp-prompt" rows="4" placeholder="Optional: additional instructions">${cardContext ? esc(`Task: ${cardContext.title}\n\n${cardContext.description}`) : ""}</textarea>
+          <textarea class="ui-input" id="dp-prompt" rows="4" placeholder="Optional: additional instructions"></textarea>
         </div>
         <div class="dialog-field">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -149,14 +141,8 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     btn.textContent = "Dispatching...";
 
     try {
-      // Derive display name from selected agent
-      const agentLabel = agentOptions.find((o) => o.value === agentDropdown.value)?.label ?? provider;
-      const agentName = agentLabel.split(" (")[0];
-
-      const sourceKanban = appState.activeWs?.info.kanban_path || undefined;
       const tabId = await ipc.dispatchAgent(
         wsIdx, provider, prompt, createWorktree, wsName,
-        cardContext?.id, sourceKanban, agentName, cardContext?.title,
       );
 
       if (createWorktree) {
@@ -176,16 +162,6 @@ export async function showDispatchDialog(cardContext?: CardContext) {
         }
       }
 
-      // Update kanban card if dispatched from card
-      if (cardContext) {
-        try {
-          await ipc.kanbanUpdateCard(wsIdx, cardContext.id, cardContext.title, cardContext.description, cardContext.priority, agentName, cardContext.project);
-          await ipc.kanbanMoveCard(wsIdx, cardContext.id, "in_progress");
-        } catch {
-          // Non-critical: card update failure shouldn't block dispatch
-        }
-      }
-
       toast("Agent dispatched", "success");
       close();
     } catch (err) {
@@ -198,8 +174,4 @@ export async function showDispatchDialog(cardContext?: CardContext) {
 
 function mapProviderToAI(label: string): AIProvider {
   return { Custom: label };
-}
-
-function esc(t: string): string {
-  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

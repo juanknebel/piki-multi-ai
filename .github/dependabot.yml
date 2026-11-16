@@ -1,6 +1,6 @@
 version: 2
 
-# PRs land on `nightly` — `main` only receives release merges (see CLAUDE.md).
+# PRs land on `nightly` — `main` only receives release merges (see AGENTS.md).
 #
 # Note: the `flow-core` / `flow-tui` dependencies are git deps pinned by tag,
 # which Dependabot cannot bump. Those still need a manual tag change in

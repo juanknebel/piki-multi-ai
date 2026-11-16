@@ -23,8 +23,11 @@ export function openProjectSearch() {
 
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
+  // autocomplete/spellcheck off — see command-palette.ts: macOS WKWebView's
+  // native suggestions popover otherwise eats ArrowUp/ArrowDown.
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus />
+    <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="palette-results"></div>
   `;
 
@@ -121,8 +124,12 @@ export function openProjectSearch() {
   }
 
   function selectMatch(m: SearchMatch) {
+    const query = input.value.trim();
     closeProjectSearch();
-    showFileViewer(wsIdx, m.path);
+    // The hit's own line and the term it matched — the viewer lands on the
+    // line and opens its find bar pre-filled, so the other hits in that file
+    // are one Enter away.
+    showFileViewer(wsIdx, m.path, { line: m.line_num, query: query || undefined });
   }
 
   async function editMatch(m: SearchMatch) {

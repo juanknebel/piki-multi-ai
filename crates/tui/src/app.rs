@@ -67,6 +67,23 @@ pub struct WatcherResult {
     pub watcher: anyhow::Result<piki_core::workspace::FileWatcher>,
 }
 
+/// Fresh git state for one workspace directory: changed files, ahead/behind,
+/// and — for a git checkout — the current branch. The branch is a property
+/// of the directory, so it resolves for every workspace unconditionally: a
+/// repo row shows its branch whether or not it has tabs open.
+pub async fn refresh_git_state(workspace_idx: usize, path: &PathBuf) -> RefreshResult {
+    // Non-git dirs yield an empty list and no branch — harmless.
+    let files = get_changed_files(path).await.unwrap_or_default();
+    let ab = get_ahead_behind(path).await;
+    let branch = get_current_branch(path).await;
+    RefreshResult {
+        workspace_idx,
+        changed_files: files,
+        ahead_behind: ab,
+        branch,
+    }
+}
+
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -98,8 +115,12 @@ pub enum AppMode {
     WorkspaceInfo,
     /// Confirmation dialog for closing a tab
     ConfirmCloseTab,
+    /// Destination picker for moving a tab to another workspace
+    MoveTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
+    /// Offer to inject piki's AGENTS.md skills block for a freshly added repo
+    SkillOffers,
     /// Workspace dashboard overview
     Dashboard,
     /// Session-daemon overlay (persistent sessions management)
@@ -118,8 +139,8 @@ pub enum AppMode {
     PrPicker,
     /// Fuzzy workspace switcher overlay
     WorkspaceSwitcher,
-    /// Dispatch agent dialog
-    DispatchAgent,
+    /// Broadcast input to agent tabs dialog
+    Broadcast,
     /// Manage agent profiles overlay
     ManageAgents,
     /// Edit/create agent profile dialog (step 1: name + provider)
@@ -128,8 +149,6 @@ pub enum AppMode {
     EditAgentRole,
     /// Import agents from repo files overlay
     ImportAgents,
-    /// Choose kanban column for dispatched card on workspace deletion
-    DispatchCardMove,
     /// Manage custom providers overlay
     ManageProviders,
     /// Edit/create a custom provider
@@ -152,33 +171,6 @@ pub enum ActivePane {
     MainPanel,
 }
 
-/// Which view the top-left sidebar pane shows. Workspaces and Projects live
-/// in the same pane as tabs (`workspaces.view` binding, default Tab, or a
-/// click on the tab title); the choice persists across restarts via the
-/// `sidebar_view` ui-pref so the pane always opens on the view you prefer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SidebarView {
-    #[default]
-    Workspaces,
-    Projects,
-}
-
-impl SidebarView {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SidebarView::Workspaces => "workspaces",
-            SidebarView::Projects => "projects",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "projects" => SidebarView::Projects,
-            _ => SidebarView::Workspaces,
-        }
-    }
-}
-
 /// Which field is active in the New Workspace dialog
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogField {
@@ -191,7 +183,6 @@ pub enum DialogField {
     Destination,
     Description,
     Prompt,
-    KanbanPath,
 }
 
 /// Source mode for the New Workspace dialog. Drives whether the dialog asks
@@ -204,39 +195,33 @@ pub enum NewWorkspaceSource {
     GitHub,
 }
 
-/// An item in the sidebar workspace list. Grouping is derived at
-/// render/navigation time from git worktree structure: workspaces that share
-/// a `source_repo` are a "family"; the one whose `workspace_type != Worktree`
-/// (if loaded) is the family's parent row and can collapse its worktree
-/// children. The one exception is `GroupHeader`: every `ephemeral` (PR
-/// review) workspace is collected under a single synthetic "pr-review" group
-/// regardless of `source_repo` (each review's checkout is its own repo, so
-/// they'd never share a family key otherwise) — see `App::sidebar_items`.
-#[derive(Debug, Clone)]
-pub enum SidebarItem {
-    Workspace {
-        index: usize,
-        /// `Some(collapsed)` when this row is a worktree-family parent with
-        /// children — i.e. other loaded workspaces share its `source_repo`
-        /// and this one isn't itself a `Worktree`. `collapsed` says whether
-        /// those children are currently hidden. `None` for every other row
-        /// (standalone workspaces, family children, and orphaned worktree
-        /// families with no parent loaded).
-        collapsed: Option<bool>,
-    },
-    /// Synthetic header for the "pr-review" group — not backed by any real
-    /// workspace. `collapsed_groups` key is the fixed string `"pr-review"`
-    /// (an absolute filesystem path, which every real `source_repo` family
-    /// key is, can never collide with it).
-    GroupHeader { collapsed: bool },
+/// The sidebar's row model: the three-level project tree, built in core by
+/// [`piki_core::projects::tree::project_tree`] from the cached project list
+/// (`App::sidebar_projects`) plus the live workspace list. There is no second
+/// row model and no flat workspace view — see `App::sidebar_rows`.
+pub use piki_core::projects::tree::{Bucket, ProjectTreeRow};
+
+/// What the sidebar cursor stands on, flattened to a copyable tag. Drives the
+/// footer hints (each row kind offers different actions) and is part of the
+/// footer cache key — `ProjectTreeRow` itself carries paths and isn't `Copy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SidebarRowKind {
+    /// Nothing selected (empty tree).
+    #[default]
+    None,
+    /// A real project header.
+    Project,
+    /// A synthetic bucket header (PR review / no project): no project to edit.
+    Bucket,
+    /// An unopened repo member — adopted on open, like a directory row.
+    Repo,
+    /// A loaded workspace.
+    Checkout,
+    /// A plain-directory member.
+    Dir,
 }
 
-/// `collapsed_groups` key for the synthetic PR-review sidebar group.
-/// Defined in core alongside the grouping rule that emits it.
-pub use piki_core::workspace::PR_REVIEW_GROUP_KEY;
-
 /// Response data for the API Explorer tab
-#[allow(dead_code)]
 pub struct ApiResponseDisplay {
     pub status: u16,
     pub elapsed_ms: u128,
@@ -252,6 +237,22 @@ pub struct ApiSearchState {
     pub matches: Vec<(usize, usize)>,
     /// Index into `matches` for the currently highlighted match
     pub current_match: usize,
+}
+
+/// Result of one jq run: a filtered body per response, or jq's message.
+pub type JqResult = Result<Vec<String>, String>;
+
+/// jq filter bar over the API response bodies. The raw responses are never
+/// modified — the filtered text lives in `ApiTabState::jq_output` — so
+/// dropping the filter is just forgetting that.
+pub struct ApiJqState {
+    pub query: String,
+    pub cursor: usize,
+    /// jq's own message from the last run (bad filter, missing binary),
+    /// shown in the bar instead of a result.
+    pub error: Option<String>,
+    /// A run is in flight.
+    pub running: bool,
 }
 
 /// State for the API history overlay
@@ -274,6 +275,15 @@ pub struct ApiTabState {
     pub search: Option<ApiSearchState>,
     /// History overlay (None = closed)
     pub history: Option<ApiHistoryState>,
+    /// jq filter bar (None = closed). Mutually exclusive with `search`:
+    /// both draw over the same row at the bottom of the response panel.
+    pub jq: Option<ApiJqState>,
+    /// Filtered body per response while a jq filter is applied; `None` shows
+    /// the raw responses.
+    pub jq_output: Option<Vec<String>>,
+    /// Slot the jq task writes its result (or error) into, polled by the
+    /// event loop — same shape as `pending_responses`.
+    pub pending_jq: Arc<Mutex<Option<JqResult>>>,
 }
 
 impl ApiTabState {
@@ -286,6 +296,9 @@ impl ApiTabState {
             pending_responses: Arc::new(Mutex::new(None)),
             search: None,
             history: None,
+            jq: None,
+            jq_output: None,
+            pending_jq: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -420,10 +433,6 @@ pub struct Workspace {
     /// `None` until the first refresh completes, or if the workspace isn't a
     /// git repo / is in detached HEAD.
     pub branch: Option<String>,
-    /// Kanban app state
-    pub kanban_app: Option<flow_tui::App>,
-    /// Kanban provider
-    pub kanban_provider: Option<Box<dyn flow_core::provider::Provider>>,
     /// Code review state
     pub code_review: Option<crate::code_review::CodeReviewState>,
     /// True when at least one tab in this workspace has emitted an idle
@@ -471,8 +480,6 @@ impl Workspace {
             last_refresh: None,
             ahead_behind: None,
             branch: None,
-            kanban_app: None,
-            kanban_provider: None,
             code_review: None,
             has_idle_notification: false,
             review_broken: false,
@@ -494,7 +501,7 @@ impl Workspace {
     /// `provider_cfg` is the matching `providers.toml` entry for `Custom`
     /// providers (resolved by the caller); its per-provider idle knobs
     /// (`idle_threshold_secs` / `idle_notify`) drive the tab's `IdleWatcher`.
-    /// Pass `None` for built-in providers (Shell/Kanban/Api/…).
+    /// Pass `None` for built-in providers (Shell/Api/…).
     pub fn add_tab(
         &mut self,
         provider: AIProvider,
@@ -843,11 +850,6 @@ impl EditorState {
     }
 }
 
-/// Stable identity for a worktree family, used as the key into
-/// `App::collapsed_groups`. The family's `source_repo` path is unique per
-/// git root and stable across reorders/reloads, unlike a workspace index.
-use piki_core::workspace::family_key;
-
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
         .nth(char_idx)
@@ -919,7 +921,7 @@ pub struct TermSearchState {
 /// is active. Only consulted in `AppMode::Normal` / `AppMode::Diff`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputState {
-    /// Passthrough: keys go to the focused pane (PTY, kanban, lists, ...).
+    /// Passthrough: keys go to the focused pane (PTY, lists, ...).
     #[default]
     Normal,
     /// The prefix key was pressed; the next key is looked up in the app table.
@@ -932,19 +934,19 @@ pub enum InputState {
     Resize,
 }
 
-/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, sidebar_view, keys)
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, sidebar_row_kind, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
-/// sidebar_view: the focused top-left pane shows different hints per tab
+/// sidebar_row_kind: what the sidebar cursor stands on, since the project tree
+/// offers different actions per row kind (see `App::sidebar_row_kind`)
 pub type FooterCache = (
     AppMode,
     InputState,
     ActivePane,
     bool,
-    bool,
     u8,
     u8,
-    SidebarView,
+    SidebarRowKind,
     Vec<(String, &'static str)>,
 );
 
@@ -982,27 +984,27 @@ pub struct App {
     agent_focus_key: Option<(usize, usize)>,
     /// Active dialog state — None means no dialog is open
     pub active_dialog: Option<DialogState>,
+    /// Collapsed keys of the sidebar tree's project headers
+    /// (`Project::collapse_key`, `PR_REVIEW_KEY`). Persisted, so a collapsed
+    /// project stays collapsed across restarts.
     pub collapsed_groups: std::collections::HashSet<String>,
+    /// Cursor over `sidebar_rows()` — the project tree's rows.
     pub selected_sidebar_row: usize,
-    /// Wheel-viewport offset for the workspace list (visual rows). The wheel
+    /// Wheel-viewport offset for the sidebar (visual rows). The wheel
     /// scrolls this without touching the selection; selection moves pull it
     /// along via `reveal_sidebar_selection`.
     pub sidebar_scroll: usize,
     /// Same for the Agents pane (agent rows); see `reveal_agent_selection`.
     pub agents_scroll: usize,
-    /// Which tab of the top-left pane is showing (Workspaces | Projects).
-    pub sidebar_view: SidebarView,
-    /// Projects shown by the sidebar's Projects tab. Loaded from storage on
-    /// tab switch / startup and reloaded after every project mutation —
-    /// renders stay pure. Members resolve against `workspaces` at render
-    /// time, exactly like the Projects overlay.
+    /// The project list the sidebar tree is built from. Loaded from storage at
+    /// startup and reloaded after every project mutation — renders stay pure.
+    /// Members resolve against `workspaces` at render time.
     pub sidebar_projects: Vec<piki_core::projects::Project>,
-    /// Expanded project ids in the sidebar's Projects tab (session-only).
-    pub projects_expanded: std::collections::HashSet<i64>,
-    /// Cursor over the flattened project rows (projects + expanded members).
-    pub selected_project_row: usize,
-    /// Wheel-viewport offset for the Projects tab; see `reveal_projects_selection`.
-    pub projects_scroll: usize,
+    /// Project id a workspace being created should join, set by the sidebar's
+    /// `add_repo` key before it opens the New Workspace dialog and consumed by
+    /// `finish_workspace_creation`. That is what makes "add a repository to
+    /// this project" one gesture instead of create-then-edit-membership.
+    pub pending_project_member: Option<i64>,
     pub status_message: Option<String>,
     /// Toast notification (replaces status_message for timed display)
     pub toast: Option<Toast>,
@@ -1204,6 +1206,9 @@ pub struct ChatPanelState {
     /// One-shot confirm: first Ctrl+L arms, the second clears. Any other key
     /// disarms.
     pub pending_clear: bool,
+    /// Running token totals for this conversation (OpenRouter / llama.cpp
+    /// only — other backends never report usage). Reset on clear.
+    pub usage: piki_api_client::ChatUsage,
 }
 
 impl App {
@@ -1247,11 +1252,8 @@ impl App {
             selected_sidebar_row: 0,
             sidebar_scroll: 0,
             agents_scroll: 0,
-            sidebar_view: SidebarView::default(),
             sidebar_projects: Vec::new(),
-            projects_expanded: std::collections::HashSet::new(),
-            selected_project_row: 0,
-            projects_scroll: 0,
+            pending_project_member: None,
             status_message: None,
             toast: None,
             fuzzy: None,
@@ -1349,15 +1351,6 @@ impl App {
             .collect()
     }
 
-    /// Providers from providers.toml that are marked `dispatchable`.
-    pub fn dispatchable_provider_list(&self) -> Vec<AIProvider> {
-        self.provider_manager
-            .dispatchable()
-            .iter()
-            .map(|config| AIProvider::Custom(config.name.clone()))
-            .collect()
-    }
-
     /// Set a toast notification, replacing any existing one.
     pub fn set_toast(&mut self, message: impl Into<String>, level: ToastLevel) {
         self.toast = Some(Toast::new(message.into(), level));
@@ -1432,20 +1425,25 @@ impl App {
 
     /// `WorkspaceInfo`s to hand to `save_workspaces`. `ephemeral` (PR review)
     /// workspaces are included — they survive a restart, restored under the
-    /// synthetic "pr-review" sidebar group (see `sidebar_items`).
+    /// synthetic PR-review bucket (see `sidebar_rows`).
     pub fn persistable_workspaces(&self) -> Vec<piki_core::WorkspaceInfo> {
         self.workspaces.iter().map(|w| w.info.clone()).collect()
     }
 
-    pub fn next_workspace(&mut self) {
-        let visible: Vec<usize> = self
-            .sidebar_items()
+    /// Workspace indices in sidebar order, each one once — what `}`/`{` cycle
+    /// through. A workspace that belongs to two projects has two rows in the
+    /// tree but must not be visited twice, so the first row wins.
+    fn cycle_order(&self) -> Vec<usize> {
+        let mut seen = std::collections::HashSet::new();
+        self.sidebar_rows()
             .iter()
-            .filter_map(|item| match item {
-                SidebarItem::Workspace { index, .. } => Some(*index),
-                SidebarItem::GroupHeader { .. } => None,
-            })
-            .collect();
+            .filter_map(|row| row.workspace_index())
+            .filter(|idx| seen.insert(*idx))
+            .collect()
+    }
+
+    pub fn next_workspace(&mut self) {
+        let visible = self.cycle_order();
         if visible.is_empty() {
             return;
         }
@@ -1458,14 +1456,7 @@ impl App {
     }
 
     pub fn prev_workspace(&mut self) {
-        let visible: Vec<usize> = self
-            .sidebar_items()
-            .iter()
-            .filter_map(|item| match item {
-                SidebarItem::Workspace { index, .. } => Some(*index),
-                SidebarItem::GroupHeader { .. } => None,
-            })
-            .collect();
+        let visible = self.cycle_order();
         if visible.is_empty() {
             return;
         }
@@ -1625,151 +1616,113 @@ impl App {
         }
     }
 
-    /// Build the visual sidebar item list. Workspaces are grouped by
-    /// `source_repo`: a "family" is any set of 2+ workspaces sharing one.
-    /// Within a family, the (at most one) workspace whose `workspace_type !=
-    /// Worktree` is the parent and is emitted first with a collapse chevron;
-    /// its `Worktree` siblings follow (in their existing relative order)
-    /// unless collapsed, in which case they're omitted entirely. A family
-    /// with no parent loaded (every member is a `Worktree`) has nothing to
-    /// attach a chevron to, so its members are emitted flat and uncollapsible.
-    /// Standalone workspaces (no siblings sharing `source_repo`) are emitted
-    /// exactly as before.
-    ///
-    /// The family block is emitted at the position of its first member
-    /// encountered in `self.workspaces` order.
-    pub fn sidebar_items(&self) -> Vec<SidebarItem> {
-        // The grouping rule itself lives in core so the desktop app applies
-        // the identical one (see `core::workspace::sidebar_rows`); this only
-        // adapts its output to the TUI's row type.
+    /// The sidebar's rows: the project tree, built in core from the cached
+    /// project list plus the live workspace list (`projects::tree`). This is
+    /// the ONE row model — there is no flat workspace view to fall back to,
+    /// and every registered workspace is reachable through it (a project, or
+    /// one of the two synthetic buckets).
+    pub fn sidebar_rows(&self) -> Vec<ProjectTreeRow> {
         let infos: Vec<piki_core::WorkspaceInfo> =
             self.workspaces.iter().map(|w| w.info.clone()).collect();
-        piki_core::workspace::sidebar_rows(&infos, &self.collapsed_groups)
-            .into_iter()
-            .map(|row| match row {
-                piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
-                    SidebarItem::GroupHeader { collapsed }
-                }
-                piki_core::workspace::SidebarRow::Workspace { index, kind } => {
-                    SidebarItem::Workspace {
-                        index,
-                        // `Some(_)` marks a family parent; children and
-                        // standalone rows both carry `None`.
-                        collapsed: match kind {
-                            piki_core::workspace::RowKind::Parent { collapsed, .. } => {
-                                Some(collapsed)
-                            }
-                            _ => None,
-                        },
-                    }
-                }
-            })
-            .collect()
+        piki_core::projects::tree::project_tree(
+            &self.sidebar_projects,
+            &infos,
+            &self.collapsed_groups,
+        )
     }
 
-    /// Indices of workspaces that have at least one open tab, ordered with
-    /// worktree families grouped: parent (workspace_type != Worktree) first,
-    /// then its Worktree children below. Uses the same grouping rule as the
-    /// sidebar (`piki_core::workspace::sidebar_rows`) but ignores collapsed
-    /// state so the dashboard always shows the full expanded view. Only
-    /// workspaces with `!tabs.is_empty()` are returned.
+    /// Indices of workspaces that have at least one open tab, in sidebar
+    /// order. Built from the tree with nothing collapsed, so the dashboard
+    /// always shows the full expanded view; a workspace in two projects is
+    /// listed once (see `cycle_order`).
     pub fn dashboard_indices(&self) -> Vec<usize> {
         let infos: Vec<piki_core::WorkspaceInfo> =
             self.workspaces.iter().map(|w| w.info.clone()).collect();
-        piki_core::workspace::sidebar_rows(&infos, &std::collections::HashSet::new())
-            .into_iter()
-            .filter_map(|row| match row {
-                piki_core::workspace::SidebarRow::Workspace { index, .. } => Some(index),
-                piki_core::workspace::SidebarRow::PrReviewHeader { .. } => None,
-            })
-            .filter(|&idx| !self.workspaces[idx].tabs.is_empty())
-            .collect()
+        let mut seen = std::collections::HashSet::new();
+        piki_core::projects::tree::project_tree(
+            &self.sidebar_projects,
+            &infos,
+            &std::collections::HashSet::new(),
+        )
+        .iter()
+        .filter_map(|row| row.workspace_index())
+        .filter(|idx| seen.insert(*idx))
+        .filter(|&idx| !self.workspaces[idx].tabs.is_empty())
+        .collect()
     }
 
-    /// Visual rows for the workspace sidebar, in render order: `Some(row)`
-    /// indexes into `sidebar_items()`, `None` is a blank separator line
-    /// inserted on BOTH sides of a block — a worktree family (before its
-    /// parent row, after its last child) or the synthetic pr-review group
-    /// (after its last child) — so the block reads as bounded against a
-    /// flat neighbor — not just closed off on one side. Two adjacent
-    /// families share a single separator between them, not one from each
-    /// side. Rendering and mouse hit-testing must both walk this list (not
-    /// `sidebar_items()` line-for-line) once separators exist, or their row
-    /// math drifts apart.
+    /// Visual rows for the sidebar, in render order: `Some(row)` indexes into
+    /// `sidebar_rows()`, `None` is a blank separator line inserted between two
+    /// top-level groups so projects read as separate blocks. Rendering and
+    /// mouse hit-testing must both walk this list (not `sidebar_rows()`
+    /// line-for-line), or their row math drifts apart.
     pub fn sidebar_visual_rows(&self) -> Vec<Option<usize>> {
-        let items = self.sidebar_items();
-        // A row's "block key" is the pr-review group when it belongs to the
-        // synthetic header (the header row itself or an ephemeral child), its
-        // source_repo when it's part of a worktree family, or None for a
-        // standalone/flat row — two flat rows never get a separator between
-        // them, only a transition into or out of a block does.
-        #[derive(PartialEq)]
-        enum BlockKey<'a> {
-            PrReview,
-            Family(&'a std::path::PathBuf),
-        }
-        let block_key = |i: usize| -> Option<BlockKey<'_>> {
-            let SidebarItem::Workspace { index, .. } = &items[i] else {
-                return Some(BlockKey::PrReview);
-            };
-            let ws = &self.workspaces[*index];
-            if ws.info.ephemeral {
-                return Some(BlockKey::PrReview);
+        let rows = self.sidebar_rows();
+        let mut out = Vec::with_capacity(rows.len() + rows.len() / 4);
+        for (i, row) in rows.iter().enumerate() {
+            if i > 0 && matches!(row, ProjectTreeRow::Project { .. }) {
+                out.push(None);
             }
-            let repo = &ws.info.source_repo;
-            let family_count = self
-                .workspaces
-                .iter()
-                .filter(|w| &w.info.source_repo == repo)
-                .count();
-            (family_count > 1).then_some(BlockKey::Family(repo))
-        };
-
-        let mut rows = Vec::with_capacity(items.len());
-        for i in 0..items.len() {
-            if i > 0 {
-                let prev = block_key(i - 1);
-                let cur = block_key(i);
-                if prev != cur && (prev.is_some() || cur.is_some()) {
-                    rows.push(None);
-                }
-            }
-            rows.push(Some(i));
+            out.push(Some(i));
         }
-        rows
+        out
     }
 
-    /// Map a sidebar visual row to a workspace index. Returns `None` when
-    /// `row` is out of range, or lands on the synthetic pr-review
-    /// `GroupHeader` (no workspace behind it to switch to).
+    /// Map a sidebar row to a workspace index. Returns `None` when `row` is
+    /// out of range or lands on a row with no workspace behind it (a project
+    /// or bucket header, an unopened repo, a plain-directory member).
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
-        match self.sidebar_items().get(row) {
-            Some(SidebarItem::Workspace { index, .. }) => Some(*index),
-            Some(SidebarItem::GroupHeader { .. }) | None => None,
+        self.sidebar_rows().get(row)?.workspace_index()
+    }
+
+    /// What the cursor stands on — see [`SidebarRowKind`].
+    pub fn sidebar_row_kind(&self) -> SidebarRowKind {
+        match self.sidebar_rows().get(self.selected_sidebar_row) {
+            None => SidebarRowKind::None,
+            Some(ProjectTreeRow::Project { bucket, .. }) => match bucket {
+                Bucket::Project(_) => SidebarRowKind::Project,
+                Bucket::PrReview | Bucket::Unassigned => SidebarRowKind::Bucket,
+            },
+            Some(ProjectTreeRow::Repo { .. }) => SidebarRowKind::Repo,
+            Some(ProjectTreeRow::Checkout { .. }) => SidebarRowKind::Checkout,
+            Some(ProjectTreeRow::Dir { .. }) => SidebarRowKind::Dir,
+        }
+    }
+
+    /// The project the cursor acts on: its own row's project, or the project
+    /// the row sits under. `None` on a synthetic bucket, which has no stored
+    /// project to edit or delete.
+    pub fn selected_project(&self) -> Option<&piki_core::projects::Project> {
+        match self.sidebar_rows().get(self.selected_sidebar_row)?.bucket() {
+            Bucket::Project(i) => self.sidebar_projects.get(i),
+            Bucket::PrReview | Bucket::Unassigned => None,
         }
     }
 
     pub fn select_next_sidebar_row(&mut self) {
-        let count = self.sidebar_items().len();
+        let count = self.sidebar_rows().len();
         if count > 0 {
             self.follow_sidebar_row((self.selected_sidebar_row + 1) % count);
         }
     }
 
     pub fn select_prev_sidebar_row(&mut self) {
-        let count = self.sidebar_items().len();
+        let count = self.sidebar_rows().len();
         if count > 0 {
             self.follow_sidebar_row((self.selected_sidebar_row + count - 1) % count);
         }
     }
 
-    /// Land the sidebar cursor on `row` and switch to that row's workspace.
+    /// Land the sidebar cursor on `row` and, when that row is a checkout,
+    /// switch to its workspace.
     ///
     /// Follow-focus: the cursor and the workspace every action targets are the
     /// same thing. Without it the two drift apart — the cursor sits on one
     /// workspace while `prefix c` opens its tab in whichever workspace the main
     /// panel still shows — and every workspace-scoped action becomes a coin
-    /// flip. Every sidebar row is a workspace now, so this always switches.
+    /// flip. Rows without a workspace behind them (project/bucket headers, an
+    /// unopened repo, a directory member) move the cursor and leave the active
+    /// workspace where it was.
     fn follow_sidebar_row(&mut self, row: usize) {
         self.selected_sidebar_row = row;
         self.reveal_sidebar_selection();
@@ -1832,31 +1785,10 @@ impl App {
         self.agents_scroll = Self::reveal_scroll(total, visible, selected, self.agents_scroll);
     }
 
-    /// Flattened rows of the sidebar's Projects tab — same shape the
-    /// Projects overlay navigates (projects + their expanded members).
-    pub fn projects_pane_rows(&self) -> Vec<crate::dialog_state::ProjectRow> {
-        crate::dialog_state::project_rows(&self.sidebar_projects, &self.projects_expanded)
-    }
-
-    /// Viewport offset for the Projects tab (shares the top-left pane rect).
-    pub fn projects_viewport(&self) -> usize {
-        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
-        let max = self.projects_pane_rows().len().saturating_sub(visible);
-        self.projects_scroll.min(max)
-    }
-
-    /// Pull the Projects-tab viewport so the selected row is visible.
-    pub fn reveal_projects_selection(&mut self) {
-        let total = self.projects_pane_rows().len();
-        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
-        let selected = self.selected_project_row.min(total.saturating_sub(1));
-        self.projects_scroll = Self::reveal_scroll(total, visible, selected, self.projects_scroll);
-    }
-
-    /// (Re)load the sidebar's Projects tab from storage: prunes expansion
-    /// state of deleted projects and clamps the cursor. Called on tab
-    /// switch, at startup when the pref restores the Projects tab, and after
-    /// every project save/delete.
+    /// (Re)load the project list the sidebar tree is built from, and clamp the
+    /// cursor to the rows that survive. Called at startup and after every
+    /// project save/delete — the tree is derived, so nothing else needs
+    /// invalidating.
     pub fn reload_sidebar_projects(&mut self) {
         self.sidebar_projects = self
             .storage
@@ -1864,57 +1796,24 @@ impl App {
             .as_ref()
             .map(|s| s.list_projects())
             .unwrap_or_default();
-        self.projects_expanded
-            .retain(|id| self.sidebar_projects.iter().any(|p| p.id == Some(*id)));
-        let rows = self.projects_pane_rows().len();
-        self.selected_project_row = self.selected_project_row.min(rows.saturating_sub(1));
+        let rows = self.sidebar_rows().len();
+        self.selected_sidebar_row = self.selected_sidebar_row.min(rows.saturating_sub(1));
+        self.reveal_sidebar_selection();
     }
 
-    /// Switch the top-left pane to `view`, loading the project list when the
-    /// Projects tab comes up, and persist the choice (`sidebar_view` pref).
-    pub fn set_sidebar_view(&mut self, view: SidebarView) {
-        if view == SidebarView::Projects {
-            self.reload_sidebar_projects();
-        }
-        if self.sidebar_view != view {
-            self.sidebar_view = view;
-            if let Some(ref ui_prefs) = self.storage.ui_prefs {
-                let _ = ui_prefs.set_preference("sidebar_view", view.as_str());
-            }
-        }
-    }
-
-    pub fn toggle_sidebar_view(&mut self) {
-        let next = match self.sidebar_view {
-            SidebarView::Workspaces => SidebarView::Projects,
-            SidebarView::Projects => SidebarView::Workspaces,
-        };
-        self.set_sidebar_view(next);
-    }
-
-    /// If the currently selected sidebar row is collapsible (a worktree-family
-    /// parent, or the synthetic pr-review `GroupHeader`), its group key and
-    /// current collapsed state.
-    fn selected_family_state(&self) -> Option<(String, bool)> {
-        match self.sidebar_items().get(self.selected_sidebar_row)? {
-            SidebarItem::Workspace {
-                index,
-                collapsed: Some(collapsed),
-            } => {
-                let ws = self.workspaces.get(*index)?;
-                Some((family_key(&ws.info), *collapsed))
-            }
-            SidebarItem::GroupHeader { collapsed } => {
-                Some((PR_REVIEW_GROUP_KEY.to_string(), *collapsed))
-            }
+    /// If the selected row is collapsible (a project/bucket header), its
+    /// collapse key and current state.
+    fn selected_collapsible(&self) -> Option<(String, bool)> {
+        match self.sidebar_rows().get(self.selected_sidebar_row)? {
+            ProjectTreeRow::Project { key, collapsed, .. } => Some((key.clone(), *collapsed)),
             _ => None,
         }
     }
 
-    /// Toggle collapse on the selected row if it's a worktree-family parent.
+    /// Toggle collapse on the selected row if it's a project header.
     /// No-op otherwise.
     pub fn toggle_selected_group(&mut self) {
-        let Some((key, collapsed)) = self.selected_family_state() else {
+        let Some((key, collapsed)) = self.selected_collapsible() else {
             return;
         };
         if collapsed {
@@ -1931,10 +1830,10 @@ impl App {
         }
     }
 
-    /// Collapse the selected row's worktree family. Tree-style `←` behaviour;
-    /// a no-op unless the selection is on an (expanded) family parent row.
+    /// Collapse the selected row's project. Tree-style `←` behaviour; a no-op
+    /// unless the selection is on an expanded header.
     pub fn collapse_selected_group(&mut self) {
-        let Some((key, collapsed)) = self.selected_family_state() else {
+        let Some((key, collapsed)) = self.selected_collapsible() else {
             return;
         };
         if !collapsed {
@@ -1943,10 +1842,10 @@ impl App {
         }
     }
 
-    /// Expand the selected row's worktree family. Tree-style `→` behaviour;
-    /// a no-op unless the selection is on a collapsed family parent row.
+    /// Expand the selected row's project. Tree-style `→` behaviour; a no-op
+    /// unless the selection is on a collapsed header.
     pub fn expand_selected_group(&mut self) {
-        let Some((key, collapsed)) = self.selected_family_state() else {
+        let Some((key, collapsed)) = self.selected_collapsible() else {
             return;
         };
         if collapsed {
@@ -1955,16 +1854,16 @@ impl App {
         }
     }
 
-    /// Update selected_sidebar_row to point to the given workspace index.
+    /// Update `selected_sidebar_row` to point at the given workspace. A
+    /// workspace that belongs to two projects has a row under each; the first
+    /// one wins, so the cursor lands somewhere deterministic.
     pub fn sync_sidebar_row(&mut self, ws_idx: usize) {
-        let items = self.sidebar_items();
-        for (i, item) in items.iter().enumerate() {
-            if let SidebarItem::Workspace { index, .. } = item
-                && *index == ws_idx
-            {
-                self.selected_sidebar_row = i;
-                break;
-            }
+        if let Some(i) = self
+            .sidebar_rows()
+            .iter()
+            .position(|row| row.workspace_index() == Some(ws_idx))
+        {
+            self.selected_sidebar_row = i;
         }
         self.reveal_sidebar_selection();
     }
@@ -1975,7 +1874,7 @@ impl App {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.set_toast("No active workspace", ToastLevel::Info);
+                self.set_toast("Nothing open", ToastLevel::Info);
                 return;
             }
         };
@@ -2014,7 +1913,7 @@ impl App {
         let root = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.set_toast("No active workspace", ToastLevel::Info);
+                self.set_toast("Nothing open", ToastLevel::Info);
                 return;
             }
         };
@@ -2033,6 +1932,40 @@ impl App {
         let mru = crate::command_palette::load_mru(&self.storage);
         self.command_palette = Some(crate::command_palette::create_state(&self.workspaces, &mru));
         self.mode = AppMode::CommandPalette;
+    }
+
+    /// Re-parent a tab into another workspace, keeping its process running.
+    ///
+    /// The PTY is untouched — only which workspace owns the tab changes (the
+    /// shell keeps the cwd it was started in). Tab ids are handed out per
+    /// workspace (`Workspace::next_tab_id`), so the tab is re-stamped on
+    /// arrival or it could collide with an id already in use there. Returns
+    /// the tab's index in the destination, or `None` when the move is not
+    /// possible (same workspace, or either index out of range).
+    pub fn move_tab(&mut self, from: usize, tab_idx: usize, to: usize) -> Option<usize> {
+        if from == to || from >= self.workspaces.len() || to >= self.workspaces.len() {
+            return None;
+        }
+        let mut tab = {
+            let src = &mut self.workspaces[from];
+            if tab_idx >= src.tabs.len() {
+                return None;
+            }
+            let tab = src.tabs.remove(tab_idx);
+            if src.active_tab >= src.tabs.len() && !src.tabs.is_empty() {
+                src.active_tab = src.tabs.len() - 1;
+            }
+            tab
+        };
+        let dst = &mut self.workspaces[to];
+        tab.id = dst.next_tab_id;
+        dst.next_tab_id += 1;
+        // Landing scrolled back would show the tab mid-scrollback on arrival.
+        tab.term_scroll = 0;
+        dst.tabs.push(tab);
+        let idx = dst.tabs.len() - 1;
+        dst.active_tab = idx;
+        Some(idx)
     }
 
     /// Toggle to the previously active workspace (Alt-Tab equivalent).
@@ -2082,6 +2015,7 @@ mod tests {
             ui_prefs: None,
             agent_profiles: None,
             projects: None,
+            repo_skills: None,
         })
     }
 
@@ -2104,6 +2038,56 @@ mod tests {
         assert_eq!(app.input_state, InputState::Normal);
         assert!(!app.should_quit);
         assert!(app.workspaces.is_empty());
+    }
+
+    /// `refresh_git_state` resolves the branch for a git checkout with no
+    /// tabs involved — a repo row shows its branch from the first paint —
+    /// and `None` for a plain directory.
+    #[tokio::test]
+    async fn test_refresh_git_state_resolves_branch_unconditionally() {
+        if std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("git not installed; skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                // Isolate from the developer's global config (signing, hooks…).
+                .env("HOME", &root)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .expect("run git");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        git(&["init", "-q"]);
+        git(&["checkout", "-q", "-b", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "init"]);
+
+        let result = refresh_git_state(3, &root).await;
+        assert_eq!(result.workspace_idx, 3);
+        assert_eq!(result.branch.as_deref(), Some("main"));
+        assert!(result.changed_files.is_empty());
+
+        let plain = tempfile::tempdir().unwrap();
+        let plain_root = plain.path().to_path_buf();
+        let result = refresh_git_state(0, &plain_root).await;
+        assert_eq!(result.branch, None);
+        assert!(result.changed_files.is_empty());
     }
 
     #[test]
@@ -2249,9 +2233,6 @@ mod tests {
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Prompt);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::KanbanPath);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Source);
@@ -2519,6 +2500,73 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('w')));
         assert_eq!(app.mode, AppMode::Normal);
         assert!(app.workspace_switcher.is_none());
+    }
+
+    // ── Move a tab between workspaces ──
+
+    #[test]
+    fn test_move_tab_reparents_and_restamps_the_id() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app); // 0
+        add_test_workspace(&mut app); // 1
+        // Ids are handed out per workspace, so the source's first tab and the
+        // destination's first tab are both id 0: moving one across without
+        // re-stamping it would put two tabs with the same id in one workspace.
+        let moved = crate::test_support::add_terminal_tab(&mut app, 0);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        crate::test_support::add_terminal_tab(&mut app, 1);
+        assert_eq!(
+            app.workspaces[0].tabs[moved].id, app.workspaces[1].tabs[0].id,
+            "ids collide as set up"
+        );
+
+        let new_idx = app.move_tab(0, moved, 1).expect("move should succeed");
+
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert_eq!(app.workspaces[1].tabs.len(), 2);
+        assert_eq!(new_idx, 1);
+        assert_eq!(app.workspaces[1].active_tab, 1, "the moved tab is in front");
+        let ids: Vec<usize> = app.workspaces[1].tabs.iter().map(|t| t.id).collect();
+        assert_ne!(ids[0], ids[1], "the moved tab got a fresh id");
+    }
+
+    #[test]
+    fn test_move_tab_clamps_the_source_active_tab() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        let last = crate::test_support::add_terminal_tab(&mut app, 0);
+        app.workspaces[0].active_tab = last;
+
+        app.move_tab(0, last, 1).expect("move should succeed");
+
+        assert_eq!(
+            app.workspaces[0].active_tab, 0,
+            "the source must not point past its last tab"
+        );
+    }
+
+    #[test]
+    fn test_move_tab_rejects_impossible_moves() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+
+        assert!(app.move_tab(0, 0, 0).is_none(), "same workspace");
+        assert!(app.move_tab(0, 9, 1).is_none(), "tab out of range");
+        assert!(app.move_tab(0, 0, 9).is_none(), "workspace out of range");
+        assert_eq!(app.workspaces[0].tabs.len(), 1, "nothing was taken");
     }
 
     // ── Previous workspace toggle tests ──
@@ -2848,6 +2896,7 @@ mod tests {
 
         // Follow-focus: j/k don't just move a cursor, they move the workspace
         // every action targets — so `prefix c` right after lands its tab here.
+        // Rows: [a, b] — one checkout per repo, so both are hoisted and loose.
         app.select_next_sidebar_row();
         assert_eq!(app.selected_workspace, b);
         assert_eq!(app.active_workspace, b);
@@ -2857,10 +2906,10 @@ mod tests {
     }
 
     #[test]
-    fn test_sidebar_cursor_on_a_worktree_family_parent_switches_to_it() {
-        // Every row is a real workspace now (no synthetic header), so the
-        // cursor always follows onto whatever it lands on — including a
-        // worktree-family parent row.
+    fn sidebar_cursor_follows_onto_checkouts_and_rests_on_headers() {
+        // The tree has header rows with no workspace behind them (the project
+        // header). Walking the cursor over those leaves the active workspace
+        // alone; landing on a checkout switches to it.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -2871,19 +2920,48 @@ mod tests {
         let shared_repo = app.workspaces[parent].info.source_repo.clone();
         app.workspaces[child].info.source_repo = shared_repo.clone();
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
         app.switch_workspace(a);
 
-        // Rows are [Workspace a, Workspace parent (collapsible), Workspace child].
-        app.select_next_sidebar_row();
-        assert!(matches!(
-            app.sidebar_items()[app.selected_sidebar_row],
-            SidebarItem::Workspace {
-                collapsed: Some(false),
-                ..
-            }
-        ));
-        assert_eq!(app.active_workspace, parent);
+        // Rows: [project, a, parent, child] — every checkout its own flat
+        // row, the clone leading its worktree.
+        let rows = app.sidebar_rows();
+        assert_eq!(rows.len(), 4, "{rows:#?}");
+        assert_eq!(rows[1].workspace_index(), Some(a));
+        assert!(rows[1].is_hoisted());
+        assert_eq!(rows[1].depth(), 1);
+        assert_eq!(rows[2].workspace_index(), Some(parent));
+        assert_eq!(rows[3].workspace_index(), Some(child));
 
+        // The cursor sits on a's row after switch_workspace(a).
+        assert_eq!(app.selected_sidebar_row, 1);
+        // Previous row is the project header: cursor moves, workspace doesn't.
+        app.select_prev_sidebar_row();
+        assert_eq!(app.selected_sidebar_row, 0);
+        assert_eq!(app.active_workspace, a);
+        // Then the checkouts, which do switch.
+        app.select_next_sidebar_row();
+        assert_eq!(app.active_workspace, a);
+        app.select_next_sidebar_row();
+        assert_eq!(app.active_workspace, parent);
         app.select_next_sidebar_row();
         assert_eq!(app.active_workspace, child);
     }
@@ -3058,17 +3136,19 @@ mod tests {
 
     #[test]
     fn test_workspace_list_keyboard_nav() {
-        // The focused workspace list is keyboard-navigable: up/down (j/k or the
-        // arrows) move the selection and Enter switches to the selected
-        // workspace. Heavier actions (new/edit/delete) still go through the
-        // prefix; bare letter keys are no-ops here.
+        // The focused project tree is keyboard-navigable: up/down (j/k or the
+        // arrows) move the selection and Enter opens the checkout under the
+        // cursor. Heavier actions (new/edit/delete workspace) still go through
+        // the prefix.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
-        add_test_workspace(&mut app); // index 0 → sidebar row 0
-        add_test_workspace(&mut app); // index 1 → sidebar row 1
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
         app.active_pane = ActivePane::WorkspaceList;
+        // Rows: [ws-0, ws-1] — each repo has one checkout, so both are hoisted
+        // and, with no project to sit under, they are top-level rows.
         app.selected_sidebar_row = 0;
 
         // Down (j) moves the selection to row 1.
@@ -3077,12 +3157,8 @@ mod tests {
         // Arrow Up moves back to row 0.
         crate::input::handle_key_event(&mut app, key(KeyCode::Up));
         assert_eq!(app.selected_sidebar_row, 0);
-        // A bare letter key is a no-op (not a prefix chord).
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('e')));
-        assert_eq!(app.selected_sidebar_row, 0);
 
-        // Arrow Down then Enter switches to the selected workspace, and focus
-        // stays on the list so navigation can continue.
+        // Down to the second workspace's row and open it.
         crate::input::handle_key_event(&mut app, key(KeyCode::Down));
         assert_eq!(app.selected_sidebar_row, 1);
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
@@ -3093,9 +3169,9 @@ mod tests {
     }
 
     #[test]
-    fn test_workspace_list_collapse_expand_group() {
-        // Side arrows (or h/l) collapse/expand a worktree family's children
-        // while the selection sits on the family's parent row.
+    fn test_workspace_list_collapse_expand_project() {
+        // Side arrows (or h/l) collapse/expand the project header the cursor
+        // is on, hiding its checkouts.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -3105,32 +3181,54 @@ mod tests {
         let shared_repo = app.workspaces[parent].info.source_repo.clone();
         app.workspaces[child].info.source_repo = shared_repo;
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
         app.active_pane = ActivePane::WorkspaceList;
-        let fam_key = family_key(&app.workspaces[parent].info);
-        // sidebar_items: [Workspace{parent, collapsed:Some(false)}, Workspace{child}]
-        app.selected_sidebar_row = 0; // the family parent row
+        // Rows: [project, parent, child]. Stand on the header.
+        app.selected_sidebar_row = 0;
+        let project_key = app.sidebar_rows()[0]
+            .collapse_key()
+            .expect("project headers are collapsible")
+            .to_string();
 
-        // h collapses the family, hiding the child row.
+        // h collapses the project, hiding both checkouts.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
-        assert!(app.collapsed_groups.contains(&fam_key));
-        assert_eq!(app.sidebar_items().len(), 1);
+        assert!(app.collapsed_groups.contains(&project_key));
+        assert_eq!(app.sidebar_rows().len(), 1);
         // l re-expands it.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
-        assert!(!app.collapsed_groups.contains(&fam_key));
-        assert_eq!(app.sidebar_items().len(), 2);
+        assert!(!app.collapsed_groups.contains(&project_key));
+        assert_eq!(app.sidebar_rows().len(), 3);
         // Arrow Left collapses again.
         crate::input::handle_key_event(&mut app, key(KeyCode::Left));
-        assert!(app.collapsed_groups.contains(&fam_key));
+        assert!(app.collapsed_groups.contains(&project_key));
         // Arrow Right expands.
         crate::input::handle_key_event(&mut app, key(KeyCode::Right));
-        assert!(!app.collapsed_groups.contains(&fam_key));
+        assert!(!app.collapsed_groups.contains(&project_key));
     }
 
     #[test]
-    fn ephemeral_workspaces_group_under_pr_review_header() {
+    fn ephemeral_workspaces_group_under_the_pr_review_bucket() {
         // Review workspaces each have their own source_repo (their own
-        // checkout path), so they'd never share a worktree-family key — they
-        // must instead land under one synthetic GroupHeader regardless.
+        // checkout path), so grouping them by repo would emit one useless
+        // header per PR — they land flat under one synthetic bucket instead.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -3141,43 +3239,41 @@ mod tests {
         app.workspaces[review_a].info.ephemeral = true;
         app.workspaces[review_b].info.ephemeral = true;
 
-        let items = app.sidebar_items();
-        // GroupHeader first, then its two review children, then the
-        // standalone plain workspace.
-        assert!(matches!(
-            items[0],
-            SidebarItem::GroupHeader { collapsed: false }
-        ));
-        let review_indices: Vec<usize> = items[1..3]
-            .iter()
-            .map(|item| match item {
-                SidebarItem::Workspace {
-                    index,
-                    collapsed: None,
-                } => *index,
-                other => panic!("expected a flat review workspace row, got {other:?}"),
-            })
-            .collect();
-        assert_eq!(review_indices, vec![review_a, review_b]);
-        assert!(matches!(
-            items[3],
-            SidebarItem::Workspace { index, collapsed: None } if index == plain
-        ));
+        let rows = app.sidebar_rows();
+        // The review bucket leads, then its two flat children, then the
+        // plain workspace as its own loose row.
+        assert_eq!(rows[0].bucket(), crate::app::Bucket::PrReview);
+        assert_eq!(
+            rows[1..3]
+                .iter()
+                .map(|r| r.workspace_index())
+                .collect::<Vec<_>>(),
+            vec![Some(review_a), Some(review_b)]
+        );
+        assert_eq!(rows[1].depth(), 1, "no repo group above a PR review");
+        // The loose workspace follows at the top level, with no header of its
+        // own — only the review bucket gets one.
+        assert_eq!(rows[3].bucket(), crate::app::Bucket::Unassigned);
+        assert_eq!(rows[3].workspace_index(), Some(plain));
+        assert_eq!(rows[3].depth(), 0);
 
-        // Collapsing the header hides both review rows but keeps the plain
+        // Collapsing the bucket hides both review rows but keeps the plain
         // workspace visible.
         app.active_pane = ActivePane::WorkspaceList;
         app.selected_sidebar_row = 0;
         app.toggle_selected_group();
         assert!(
             app.collapsed_groups
-                .contains(crate::app::PR_REVIEW_GROUP_KEY)
+                .contains(piki_core::projects::tree::PR_REVIEW_KEY)
         );
-        let collapsed_items = app.sidebar_items();
-        assert_eq!(collapsed_items.len(), 2);
+        let collapsed = app.sidebar_rows();
+        assert_eq!(collapsed.len(), 2, "{collapsed:#?}");
         assert!(matches!(
-            collapsed_items[0],
-            SidebarItem::GroupHeader { collapsed: true }
+            collapsed[0],
+            ProjectTreeRow::Project {
+                collapsed: true,
+                ..
+            }
         ));
     }
 

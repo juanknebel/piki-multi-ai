@@ -12,7 +12,6 @@ use piki_core::{AIProvider, ChangedFile, WorkspaceInfo, WorkspaceStatus};
 
 use crate::pty_raw::RawPtySession;
 
-#[allow(dead_code)]
 pub struct DesktopApp {
     pub workspaces: Vec<DesktopWorkspace>,
     pub active_workspace: usize,
@@ -39,6 +38,9 @@ pub struct DesktopApp {
     pub chat_config: piki_core::chat::ChatConfig,
     /// Whether a chat response is currently being streamed.
     pub chat_streaming: bool,
+    /// Running token totals for this conversation (OpenRouter / llama.cpp
+    /// only). Reset by `chat_clear`.
+    pub chat_usage: piki_api_client::ChatUsage,
     /// Whether agent mode (tool-use) is enabled for chat.
     pub chat_agent_mode: bool,
     /// Write-tool approvals the agent loop is waiting on, by tool call id.
@@ -57,7 +59,6 @@ pub struct DesktopApp {
     pub scratch_terminal_visible: bool,
 }
 
-#[allow(dead_code)]
 pub struct DesktopWorkspace {
     pub info: WorkspaceInfo,
     pub status: WorkspaceStatus,
@@ -84,7 +85,7 @@ pub struct DesktopTab {
     /// Custom title set by user (takes precedence over provider label).
     pub custom_title: Option<String>,
     /// Idle watcher for provider tabs (`AIProvider::Custom(_)`). Polled by
-    /// the background tick loop in `main.rs`. `None` for Shell, Kanban, etc.
+    /// the background tick loop in `main.rs`. `None` for Shell, Api, etc.
     pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
 }
 

@@ -14,6 +14,8 @@ pub struct ProviderInfo {
     pub prompt_flag: String,
     pub dispatchable: bool,
     pub agent_dir: Option<String>,
+    pub idle_threshold_secs: Option<u64>,
+    pub idle_notify: bool,
 }
 
 fn config_to_info(config: &piki_core::providers::ProviderConfig) -> ProviderInfo {
@@ -31,6 +33,8 @@ fn config_to_info(config: &piki_core::providers::ProviderConfig) -> ProviderInfo
         prompt_flag,
         dispatchable: config.dispatchable,
         agent_dir: config.agent_dir.clone(),
+        idle_threshold_secs: config.idle_threshold_secs,
+        idle_notify: config.idle_notify,
     }
 }
 
@@ -57,6 +61,11 @@ pub struct SaveProviderArgs {
     pub prompt_flag: String,
     pub dispatchable: bool,
     pub agent_dir: Option<String>,
+    /// Idle seconds before the provider counts as idle (None = default).
+    /// Optional so older frontends keep working; form always sends it.
+    pub idle_threshold_secs: Option<u64>,
+    /// Whether idle detection notifies. Optional, defaults to true.
+    pub idle_notify: Option<bool>,
 }
 
 #[tauri::command]
@@ -70,14 +79,10 @@ pub async fn save_provider(
         _ => piki_core::providers::PromptFormat::Positional,
     };
     let mut app = state.lock();
-    // Preserve fields the UI form doesn't expose today — defaulting them
-    // would wipe Claude's ✦ / Gemini's ✧ icon and any per-provider idle
-    // config (`idle_threshold_secs` / `idle_notify` from providers.toml) on
-    // every save.
+    // Preserve the icon the UI form doesn't expose — defaulting it would
+    // wipe Claude's ✦ / Gemini's ✧ on every save.
     let prev = app.provider_manager.get(&provider.name);
     let preserved_icon = prev.and_then(|c| c.icon.clone());
-    let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
-    let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
     let config = piki_core::providers::ProviderConfig {
         name: provider.name,
         description: provider.description,
@@ -86,8 +91,8 @@ pub async fn save_provider(
         prompt_format,
         dispatchable: provider.dispatchable,
         agent_dir: provider.agent_dir.filter(|s| !s.is_empty()),
-        idle_threshold_secs: preserved_idle_threshold,
-        idle_notify: preserved_idle_notify,
+        idle_threshold_secs: provider.idle_threshold_secs,
+        idle_notify: provider.idle_notify.unwrap_or(true),
         icon: preserved_icon,
     };
     app.provider_manager.upsert(config);

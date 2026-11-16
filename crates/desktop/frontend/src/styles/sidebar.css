@@ -1,5 +1,5 @@
-/* ── Workspace list ──────────────────────────────── */
-#workspace-list {
+/* ── The sidebar tree (projects → repos → checkouts) ── */
+#projects-view {
   background: var(--sidebar-bg);
 }
 
@@ -75,14 +75,11 @@
   border-left: 2px solid transparent;
 }
 
-/* Children indent one step past the parent's gutter so their labels read
-   as nested under the parent's name. */
-.workspace-item.grouped {
-  padding-left: 32px;
-}
+/* Indentation comes from each row's `data-depth` (see projects.css) —
+   every row stands alone, so there is no grouping mark. */
 
-/* Fixed-width leading slot on every row (chevron on parents, accent dot on
-   the active row, empty otherwise) so labels align across the list. */
+/* Fixed-width leading slot on every row (chevron on parents, empty
+   otherwise) so labels align across the list whatever the row kind. */
 .workspace-gutter {
   display: inline-flex;
   align-items: center;
@@ -109,15 +106,10 @@
   border-left-color: var(--accent-primary);
 }
 
-/* Static on purpose: it marks the active row, it doesn't ask for attention,
-   and a permanent animation would keep WebKitGTK compositing forever. */
-.workspace-active-marker {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-primary);
-  flex-shrink: 0;
-  box-shadow: var(--accent-glow);
+/* The hub of a worktree family stands out from a plain clone at a glance —
+   no icon or badge, just weight. */
+.workspace-item.family-parent .workspace-name {
+  font-weight: 600;
 }
 
 .workspace-name {
@@ -180,6 +172,16 @@
 }
 
 .workspace-restored {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+  color: var(--accent-primary);
+}
+
+/* Parent of worktrees in this group: an explicit badge next to the other
+   row glyphs, so the hub never depends on font weight alone to read apart
+   from a plain clone. */
+.workspace-parent {
   flex-shrink: 0;
   margin-left: 6px;
   font-size: var(--fs-sm);

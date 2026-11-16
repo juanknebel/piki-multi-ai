@@ -1,7 +1,7 @@
 use crate::app::{DialogField, NewWorkspaceSource};
 
 /// Field-cycling behavior for tab-navigation in multi-field dialogs.
-/// Implemented by per-dialog field enums (`EditWorkspaceField`,
+/// Implemented by per-dialog field enums (`CreateWorktreeField`,
 /// `EditProviderField`, `EditAgentField`, `DialogField`) so handlers can
 /// call `*active_field = active_field.next()` instead of hard-coding match
 /// arms.
@@ -17,19 +17,17 @@ impl CycleField for DialogField {
             Self::Directory => Self::Destination,
             Self::Destination => Self::Description,
             Self::Description => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Source,
+            Self::Prompt => Self::Source,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Source => Self::KanbanPath,
+            Self::Source => Self::Prompt,
             Self::Directory => Self::Source,
             Self::Destination => Self::Directory,
             Self::Description => Self::Destination,
             Self::Prompt => Self::Description,
-            Self::KanbanPath => Self::Prompt,
         }
     }
 }
@@ -103,27 +101,22 @@ pub enum DialogState {
         desc_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        kanban: String,
-        kanban_cursor: usize,
         source: NewWorkspaceSource,
         active_field: DialogField,
     },
     EditWorkspace {
         target: usize,
-        kanban: String,
-        kanban_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        active_field: EditWorkspaceField,
     },
     /// Create a git worktree from a GitHub-origin parent workspace, or load
     /// one that already exists on disk (via `git worktree list`). The parent
     /// is identified by index.
-    /// `mode` selects between the two flows; `name`/`prompt`/`kanban`/
+    /// `mode` selects between the two flows; `name`/`prompt`/
     /// `active_field` are only meaningful when `mode == CreateNew` (they
-    /// capture the worktree branch name plus optional overrides, pre-filled
-    /// from the parent). `existing`/`existing_selected`/`existing_loading`
-    /// are only meaningful when `mode == LoadExisting`.
+    /// capture the worktree branch name plus an optional prompt override,
+    /// pre-filled from the parent). `existing`/`existing_selected`/
+    /// `existing_loading` are only meaningful when `mode == LoadExisting`.
     CreateWorktree {
         parent_idx: usize,
         mode: CreateWorktreeMode,
@@ -131,8 +124,6 @@ pub enum DialogState {
         name_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        kanban: String,
-        kanban_cursor: usize,
         active_field: CreateWorktreeField,
         existing: Vec<piki_core::workspace::ExistingWorktree>,
         existing_selected: usize,
@@ -144,7 +135,26 @@ pub enum DialogState {
     ConfirmCloseTab {
         target: usize,
     },
+    /// Destination picker for "move this tab to another workspace". `tab` is
+    /// the index in the SOURCE workspace (the active one when the dialog
+    /// opened) and `targets` the candidate workspace indices — every
+    /// workspace but the source, in sidebar order.
+    MoveTab {
+        tab: usize,
+        targets: Vec<usize>,
+        selected: usize,
+    },
     ConfirmQuit,
+    /// Offers injecting piki's agent-skills block into this repo's
+    /// AGENTS.md, opened right after a workspace is added/created. `skills`
+    /// is only ever the subset still undecided for this `workspace_idx`'s
+    /// `source_repo` (see `piki_core::repo_skills::pending_offers`) —
+    /// already-accepted skills are silently resynced before this dialog
+    /// would even open, never re-offered.
+    SkillOffers {
+        workspace_idx: usize,
+        skills: Vec<&'static piki_core::repo_skills::Skill>,
+    },
     NewTab {
         menu: NewTabMenu,
     },
@@ -199,25 +209,26 @@ pub enum DialogState {
         /// Daemon pid read from its pid file at open time (renders are pure).
         daemon_pid: Option<u32>,
     },
-    /// Projects overlay (`prefix ctrl-p`): cross-repo groups of workspaces
-    /// and directories, each with a colour. Loaded from storage at open time
-    /// and reloaded after every save/delete (renders stay pure).
-    Projects {
-        projects: Vec<piki_core::projects::Project>,
-        /// Index into the flattened row list (see [`project_rows`]).
+    /// Put the row under the cursor into a project, or take it out
+    /// (`AppMode::Projects`, the tree's `membership` key). The TUI has no
+    /// context menus, so this is the counterpart of the desktop row menu's
+    /// "Add to / Remove from project X" — without it, moving a loose
+    /// repository into a project meant opening the project editor and
+    /// hunting for it in the member checklist.
+    ProjectMembership {
+        /// The member path being toggled (a checkout's, or a directory's).
+        path: std::path::PathBuf,
+        /// What to call it in the header.
+        label: String,
+        /// Every project, with whether `path` is already a member. Snapshotted
+        /// at open time — renders stay pure.
+        rows: Vec<(piki_core::projects::Project, bool)>,
         selected: usize,
-        /// Ids of the projects whose member rows are shown.
-        expanded: std::collections::HashSet<i64>,
-        scroll_offset: usize,
     },
-    /// Edit/create a project — the Projects overlay's sub-dialog (same
-    /// `AppMode::Projects`; Esc goes back to the list). Also opened by the
-    /// sidebar's Projects tab, in which case Esc/save return to Normal.
+    /// Edit/create a project (`AppMode::Projects`), opened from the sidebar
+    /// tree. Esc and save both return to Normal — the tree underneath is a
+    /// pane, not a list dialog to go back to.
     ProjectEdit {
-        /// Where Esc/save land: back to the Projects overlay list (opened
-        /// from the overlay) or straight to Normal (opened from the
-        /// sidebar's Projects tab, which is not a dialog).
-        return_to_list: bool,
         /// None = creating new, Some(id) = editing existing.
         editing_id: Option<i64>,
         name: String,
@@ -242,24 +253,6 @@ pub enum DialogState {
         search_buffer: String,
         search_cursor: usize,
         auto_refresh: bool,
-    },
-    DispatchAgent {
-        source_ws: usize,
-        card_id: String,
-        card_title: String,
-        card_description: String,
-        card_priority: flow_core::Priority,
-        card_project: String,
-        /// When agents exist: index into agents vec. When empty: index into dispatchable provider list
-        agent_idx: usize,
-        /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers
-        agents: Vec<(String, String, String)>,
-        additional_prompt: String,
-        additional_prompt_cursor: usize,
-        /// 0 = agent/provider select, 1 = workspace destination select
-        step: u8,
-        /// When step==1: false = new worktree, true = use current workspace
-        use_current_ws: bool,
     },
     ManageAgents {
         selected: usize,
@@ -293,14 +286,23 @@ pub enum DialogState {
         selected: Vec<bool>,
         cursor: usize,
     },
-    /// Choose which kanban column to move a dispatched card to when deleting a workspace
-    DispatchCardMove {
-        /// Workspace index being deleted
-        target: usize,
-        /// Available columns: (id, title)
-        columns: Vec<(String, String)>,
-        /// Currently selected column index
-        selected: usize,
+    /// Broadcast one input line to several agent tabs at once (e.g. `/stop`).
+    /// Snapshot of [`App::agent_rows`] taken when the dialog opens.
+    Broadcast {
+        /// Every agent (workspace, tab) pair listed.
+        rows: Vec<(usize, usize)>,
+        /// Multi-select checkboxes, one per row. Empty on confirm =
+        /// send to the highlighted row alone.
+        selected: Vec<bool>,
+        /// Highlight cursor into `rows`.
+        cursor: usize,
+        /// Text to send.
+        input: String,
+        input_cursor: usize,
+        /// 0 = agent checklist, 1 = text input.
+        step: u8,
+        /// Append Enter after the text (execute it) instead of typing it raw.
+        append_enter: bool,
     },
     /// Manage custom providers overlay
     ManageProviders {
@@ -324,6 +326,10 @@ pub enum DialogState {
         dispatchable: bool,
         agent_dir: String,
         agent_dir_cursor: usize,
+        /// Idle threshold in seconds as typed (empty = provider default).
+        idle_threshold: String,
+        idle_threshold_cursor: usize,
+        idle_notify: bool,
         active_field: EditProviderField,
     },
     RenameTab {
@@ -374,34 +380,6 @@ impl CycleField for ProjectEditField {
     }
 }
 
-/// One visible row of the Projects overlay list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProjectRow {
-    /// Index into the dialog's projects vec.
-    Project(usize),
-    /// (project index, member index) of an expanded project's member.
-    Member(usize, usize),
-}
-
-/// Flatten the project list plus its expansion state into the visible rows.
-/// Shared by the input handler and the renderer so `selected` always
-/// addresses exactly what is on screen.
-pub fn project_rows(
-    projects: &[piki_core::projects::Project],
-    expanded: &std::collections::HashSet<i64>,
-) -> Vec<ProjectRow> {
-    let mut rows = Vec::new();
-    for (pi, p) in projects.iter().enumerate() {
-        rows.push(ProjectRow::Project(pi));
-        if p.id.is_some_and(|id| expanded.contains(&id)) {
-            for mi in 0..p.members.len() {
-                rows.push(ProjectRow::Member(pi, mi));
-            }
-        }
-    }
-    rows
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditProviderField {
     Name,
@@ -412,6 +390,8 @@ pub enum EditProviderField {
     PromptFlag,
     Dispatchable,
     AgentDir,
+    IdleThreshold,
+    IdleNotify,
 }
 
 impl CycleField for EditProviderField {
@@ -424,13 +404,15 @@ impl CycleField for EditProviderField {
             Self::PromptFormat => Self::PromptFlag,
             Self::PromptFlag => Self::Dispatchable,
             Self::Dispatchable => Self::AgentDir,
-            Self::AgentDir => Self::Name,
+            Self::AgentDir => Self::IdleThreshold,
+            Self::IdleThreshold => Self::IdleNotify,
+            Self::IdleNotify => Self::Name,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Name => Self::AgentDir,
+            Self::Name => Self::IdleNotify,
             Self::Description => Self::Name,
             Self::Command => Self::Description,
             Self::DefaultArgs => Self::Command,
@@ -438,6 +420,8 @@ impl CycleField for EditProviderField {
             Self::PromptFlag => Self::PromptFormat,
             Self::Dispatchable => Self::PromptFlag,
             Self::AgentDir => Self::Dispatchable,
+            Self::IdleThreshold => Self::AgentDir,
+            Self::IdleNotify => Self::IdleThreshold,
         }
     }
 }
@@ -462,34 +446,12 @@ impl CycleField for EditAgentField {
     }
 }
 
-/// Active field in the EditWorkspace dialog. Restricted to the three editable
-/// fields (the workspace's name/dir/type are immutable at edit time).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EditWorkspaceField {
-    KanbanPath,
-    Prompt,
-}
-
-impl CycleField for EditWorkspaceField {
-    fn next(self) -> Self {
-        match self {
-            Self::KanbanPath => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-        }
-    }
-
-    fn prev(self) -> Self {
-        // Two-variant cycle: prev == next.
-        self.next()
-    }
-}
-
 /// Which step of the CreateWorktree dialog is currently shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateWorktreeMode {
     /// Pick "Create new worktree" vs "Load existing worktree".
     ChooseSource,
-    /// Today's text-field flow: branch name + optional prompt/kanban.
+    /// Today's text-field flow: branch name + optional prompt.
     CreateNew,
     /// Pick from worktrees discovered on disk via `git worktree list`.
     LoadExisting,
@@ -500,23 +462,18 @@ pub enum CreateWorktreeMode {
 pub enum CreateWorktreeField {
     Name,
     Prompt,
-    KanbanPath,
 }
 
 impl CycleField for CreateWorktreeField {
     fn next(self) -> Self {
         match self {
             Self::Name => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Name,
+            Self::Prompt => Self::Name,
         }
     }
 
     fn prev(self) -> Self {
-        match self {
-            Self::Name => Self::KanbanPath,
-            Self::Prompt => Self::Name,
-            Self::KanbanPath => Self::Prompt,
-        }
+        // Two-variant cycle: prev == next.
+        self.next()
     }
 }

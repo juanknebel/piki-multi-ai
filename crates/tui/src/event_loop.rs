@@ -98,14 +98,9 @@ pub(crate) async fn run(
         {
             app.code_review_split_pct = pct.clamp(10, 90);
         }
-        // Which tab the top-left pane opens on (Workspaces | Projects).
-        if let Ok(Some(val)) = ui_prefs.get_preference("sidebar_view") {
-            app.sidebar_view = crate::app::SidebarView::from_str(&val);
-            if app.sidebar_view == crate::app::SidebarView::Projects {
-                app.reload_sidebar_projects();
-            }
-        }
     }
+    // The sidebar is the project tree, always — load the projects it renders.
+    app.reload_sidebar_projects();
 
     // Load chat config from storage (shared with desktop)
     if let Some(ref ui_prefs) = storage.ui_prefs
@@ -159,8 +154,8 @@ pub(crate) async fn run(
     // Connect to the session daemon (launching it if needed) and re-attach any
     // sessions that survived a previous run — each becomes its tab again with
     // screen + scrollback restored. Falls back silently to in-process PTYs if
-    // the daemon is unavailable. Runs before the refresh loop below so a
-    // re-attached tab counts toward `has_tab` (branch inference).
+    // the daemon is unavailable. Runs before the refresh loop below so the
+    // first frame already knows which workspaces have live tabs.
     if app.config.sessions.enabled {
         let session_t0 = Instant::now();
         app.session_daemon = crate::helpers::connect_session_daemon(&paths);
@@ -209,26 +204,12 @@ pub(crate) async fn run(
     // sidebar counts as they land. (Harmless no-op for non-git directories.)
     for (idx, ws) in app.workspaces.iter().enumerate() {
         let path = ws.info.path.clone();
-        // Branch is inferred, never persisted (see `Workspace::branch`) — and
-        // only inferred once some tool (shell/agent/git) has actually run in
-        // this workspace, i.e. it has a tab. Startup itself doesn't count,
-        // so a workspace with no tabs yet shows no branch until one opens.
-        let has_tab = !ws.tabs.is_empty();
+        // Branch is inferred, never persisted (see `Workspace::branch`) — for
+        // every workspace, with or without tabs: it is a property of the
+        // directory, so a repo row shows it from the first paint.
         let tx = app.refresh_tx.clone();
         tokio::spawn(async move {
-            let files = app::get_changed_files(&path).await.unwrap_or_default();
-            let ab = app::get_ahead_behind(&path).await;
-            let branch = if has_tab {
-                app::get_current_branch(&path).await
-            } else {
-                None
-            };
-            let _ = tx.send(app::RefreshResult {
-                workspace_idx: idx,
-                changed_files: files,
-                ahead_behind: ab,
-                branch,
-            });
+            let _ = tx.send(app::refresh_git_state(idx, &path).await);
         });
     }
     if !app.workspaces.is_empty() {
@@ -478,6 +459,10 @@ pub(crate) async fn run(
                             app.chat_panel.streaming = false;
                             app.needs_redraw = true;
                         }
+                        piki_api_client::ChatStreamEvent::Usage(usage) => {
+                            app.chat_panel.usage.add(usage);
+                            app.needs_redraw = true;
+                        }
                         piki_api_client::ChatStreamEvent::Error(e) => {
                             app.set_toast(format!("Chat error: {e}"), app::ToastLevel::Error);
                             app.chat_panel.streaming = false;
@@ -540,6 +525,10 @@ pub(crate) async fn run(
                                 tool_call_id: None,
                             });
                             app.chat_panel.agent_tool_status = None;
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::Usage(usage) => {
+                            app.chat_panel.usage.add(usage);
                             app.needs_redraw = true;
                         }
                         piki_agent::AgentEvent::Finished => {
@@ -1023,6 +1012,7 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let active_ws = app.active_workspace;
         let mut command_end_events: Vec<CommandEndNotice> = Vec::new();
         let mut cli_agent_events: Vec<CliAgentNotice> = Vec::new();
+        let mut open_requests: Vec<(usize, String, String)> = Vec::new();
         for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
             let ws_name = ws.info.name.clone();
             let active_tab = ws.active_tab;
@@ -1050,6 +1040,23 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                             else {
                                 continue;
                             };
+                            // `piki-ctl open file ...` (or any future
+                            // agent-agnostic action-emitting tool) — an
+                            // imperative UI action, not a status change, so
+                            // it's queued here and applied after this loop
+                            // (can't touch `app` as a whole while `ws` is
+                            // still borrowed from `app.workspaces.iter_mut()`
+                            // — same reason command/cli-agent notices defer
+                            // below) rather than via `a.attention()`.
+                            if let piki_core::cli_agent::CliAgentEvent::Open {
+                                target_kind,
+                                path,
+                                ..
+                            } = &a
+                            {
+                                open_requests.push((ws_idx, target_kind.clone(), path.clone()));
+                                continue;
+                            }
                             if let Some((kind, summary)) = a.attention() {
                                 cli_agent_events.push(CliAgentNotice {
                                     workspace_idx: ws_idx,
@@ -1094,6 +1101,44 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 n.from_active_view,
             );
         }
+        // The TUI's only in-app file viewer today is the markdown tab (see
+        // `input::fuzzy_input`'s own "open markdown" shortcut); anything
+        // else gets an honest toast rather than silently doing nothing.
+        for (ws_idx, target_kind, path) in open_requests {
+            if target_kind != "file" {
+                app.set_toast(
+                    format!("piki-ctl: unsupported target kind \"{target_kind}\""),
+                    crate::app::ToastLevel::Error,
+                );
+                continue;
+            }
+            if !crate::input::is_markdown(std::path::Path::new(&path)) {
+                app.set_toast(
+                    "piki-ctl: only markdown files can be previewed in the TUI".to_string(),
+                    crate::app::ToastLevel::Error,
+                );
+                continue;
+            }
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    let label = std::path::Path::new(&path)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "markdown".to_string());
+                    if let Some(ws) = app.workspaces.get_mut(ws_idx) {
+                        ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
+                    }
+                    app.active_pane = crate::app::ActivePane::MainPanel;
+                    app.active_workspace = ws_idx;
+                    app.set_toast(format!("Opened {label}"), crate::app::ToastLevel::Success);
+                    app.needs_redraw = true;
+                }
+                Err(e) => app.set_toast(
+                    format!("piki-ctl: failed to read file: {e}"),
+                    crate::app::ToastLevel::Error,
+                ),
+            }
+        }
     }
 
     // Poll API Explorer pending responses
@@ -1107,6 +1152,37 @@ fn poll_workspaces(app: &mut App, now: Instant) {
             api.responses = responses;
             api.loading = false;
             api.response_scroll = 0;
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll the jq filter task — same shape as the request above, but the bar
+    // survives a failure so the filter can be corrected in place.
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref mut api) = tab.api_state
+        && api.jq.as_ref().is_some_and(|jq| jq.running)
+    {
+        let result = { api.pending_jq.lock().take() };
+        if let Some(result) = result {
+            match result {
+                Ok(output) => {
+                    api.jq_output = Some(output);
+                    api.response_scroll = 0;
+                    if let Some(ref mut jq) = api.jq {
+                        jq.error = None;
+                    }
+                }
+                Err(e) => {
+                    api.jq_output = None;
+                    if let Some(ref mut jq) = api.jq {
+                        jq.error = Some(e);
+                    }
+                }
+            }
+            if let Some(ref mut jq) = api.jq {
+                jq.running = false;
+            }
             app.needs_redraw = true;
         }
     }
@@ -1313,26 +1389,10 @@ fn poll_workspaces(app: &mut App, now: Instant) {
             };
             if should_refresh && !app.refresh_pending {
                 let path = ws.info.path.clone();
-                // See the startup loop above: branch is only inferred
-                // once a tool has actually run in this workspace.
-                let has_tab = !ws.tabs.is_empty();
                 let tx = app.refresh_tx.clone();
                 app.refresh_pending = true;
                 tokio::spawn(async move {
-                    // Non-git dirs (Project workspaces) yield an empty list
-                    let files = app::get_changed_files(&path).await.unwrap_or_default();
-                    let ab = app::get_ahead_behind(&path).await;
-                    let branch = if has_tab {
-                        app::get_current_branch(&path).await
-                    } else {
-                        None
-                    };
-                    let _ = tx.send(app::RefreshResult {
-                        workspace_idx: idx,
-                        changed_files: files,
-                        ahead_behind: ab,
-                        branch,
-                    });
+                    let _ = tx.send(app::refresh_git_state(idx, &path).await);
                 });
             }
         }

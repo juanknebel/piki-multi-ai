@@ -46,7 +46,7 @@ pub struct LaunchPlan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchError {
     /// Renders from application state and never spawns a process
-    /// (Kanban, Api, CodeReview).
+    /// (Api, CodeReview).
     NotATerminal(AIProvider),
     /// `AIProvider::Custom(name)` with no matching `providers.toml` entry.
     UnknownProvider(String),
@@ -127,10 +127,7 @@ fn resolve_command(
     shell_override: Option<&str>,
 ) -> Result<(String, Vec<String>), LaunchError> {
     // Providers that render from app state have no command at all.
-    if matches!(
-        provider,
-        AIProvider::Kanban | AIProvider::Api | AIProvider::CodeReview
-    ) {
+    if matches!(provider, AIProvider::Api | AIProvider::CodeReview) {
         return Err(LaunchError::NotATerminal(provider.clone()));
     }
 
@@ -329,7 +326,7 @@ mod tests {
 
     #[test]
     fn state_rendered_providers_are_not_terminals() {
-        for p in [AIProvider::Kanban, AIProvider::Api, AIProvider::CodeReview] {
+        for p in [AIProvider::Api, AIProvider::CodeReview] {
             let err = launch_plan(&p, None, None, &paths(), None).unwrap_err();
             assert_eq!(err, LaunchError::NotATerminal(p));
         }

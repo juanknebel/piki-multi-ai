@@ -45,7 +45,7 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 base64 = "0.23"
 
 # Fast synchronization primitives
-parking_lot = "0.12"
+parking_lot = "0.13"
 
 # Error handling
 anyhow = "1"
@@ -62,12 +62,8 @@ clap = { version = "4", features = ["derive"] }
 tui-markdown = "0.3"
 chrono = "0.4.44"
 
-# Kanban board
-flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
-flow-tui = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
-
 # LRU cache
-lru = "0.18"
+lru = "0.19"
 
 # Syntax highlighting
 syntect = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "regex-fancy"] }

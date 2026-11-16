@@ -8,6 +8,7 @@ import {
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
 import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
+import { projectsSnapshot } from "./projects-panel";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
@@ -20,6 +21,7 @@ import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
+import { cycleWorkspace, switchToWorkspace, toggleLastWorkspace } from "./workspace-actions";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
@@ -69,8 +71,13 @@ export async function openCommandPalette() {
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
 
+  // autocomplete/autocorrect/spellcheck off: on macOS, WKWebView shows its
+  // native text-suggestions popover over a plain <input> and steals
+  // ArrowUp/ArrowDown for it — without this the list filters as you type
+  // but the arrow keys never reach this component's own keydown handler.
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Type a command..." autofocus />
+    <input class="palette-input" type="text" placeholder="Type a command..." autofocus
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="palette-results"></div>
   `;
 
@@ -204,8 +211,8 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   // Workspace commands
   cmds.push({
     id: "ws-create",
-    label: "Create Workspace",
-    category: "Workspace",
+    label: "Add Repository",
+    category: "Checkout",
     keybinding: getShortcutKey("new-workspace"),
     action: () => showWorkspaceDialog({ mode: "create" }),
   });
@@ -217,27 +224,36 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     cmds.push({
       id: "ws-edit",
       label: `Edit "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => showWorkspaceDialog({ mode: "edit", editIndex: wsIdx }),
     });
     cmds.push({
       id: "ws-info",
       label: `Info "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => showWorkspaceInfo(wsIdx),
     });
     if (ws.info.origin?.kind === "GitHub") {
       cmds.push({
         id: "ws-create-worktree",
-        label: `Create Worktree from "${ws.info.name}"`,
-        category: "Workspace",
-        action: () => showCreateWorktreeDialog(ws.info),
+        label: `New Branch from "${ws.info.name}"`,
+        category: "Checkout",
+        // Joins whichever project the active checkout is in, like the tree's
+        // own entry — `projectOfWorkspace` lives there, so resolve it the same
+        // way from the cached project list.
+        action: () =>
+          showCreateWorktreeDialog(
+            ws.info,
+            projectsSnapshot().find((p) =>
+              p.members.some((m) => m.path === ws.info.path),
+            )?.id ?? null,
+          ),
       });
     }
     cmds.push({
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => void confirmDeleteWorkspace(wsIdx),
     });
   }
@@ -250,16 +266,33 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       label: `Switch to "${w.info.name}"`,
       category: "Switch",
       keybinding: i < 9 ? formatShortcut(`Alt+${i + 1}`) : undefined,
-      action: async () => {
-        try {
-          const detail = await ipc.switchWorkspace(i);
-          appState.setActiveWorkspace(i, detail);
-        } catch (err) {
-          toast(`Switch failed: ${err}`, "error");
-        }
-      },
+      action: () => void switchToWorkspace(i),
     });
   });
+
+  if (appState.workspaces.length > 1) {
+    cmds.push({
+      id: "ws-next",
+      label: "Next Checkout",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-next"),
+      action: () => void cycleWorkspace(1),
+    });
+    cmds.push({
+      id: "ws-prev",
+      label: "Previous Checkout",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-prev"),
+      action: () => void cycleWorkspace(-1),
+    });
+    cmds.push({
+      id: "ws-last",
+      label: "Toggle Last Checkout",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-last"),
+      action: () => void toggleLastWorkspace(),
+    });
+  }
 
   // Tab commands (only configured providers + built-in tools)
   for (const provider of providerTabs) {
@@ -323,7 +356,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   if (ws && ws.wsTabs.length > 0 && appState.workspaces.length > 1) {
     cmds.push({
       id: "move-tab",
-      label: "Move Tab to Workspace…",
+      label: "Move Tab to Checkout…",
       category: "Tab",
       action: () => moveActiveWsTabToWorkspace(),
     });
@@ -503,19 +536,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   });
   cmds.push({
     id: "search-workspace",
-    label: "Switch Workspace",
+    label: "Switch Checkout",
     category: "Search",
     keybinding: getShortcutKey("workspace-switcher"),
     action: () => openWorkspaceSwitcher(),
   });
 
   // View commands
-  cmds.push({
-    id: "view-workspaces",
-    label: "Show Workspaces",
-    category: "View",
-    action: () => appState.setActiveView("workspaces"),
-  });
   cmds.push({
     id: "view-projects",
     label: "Show Projects",
@@ -559,13 +586,6 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     label: "Show Source Control",
     category: "View",
     action: () => appState.setActiveView("git"),
-  });
-  cmds.push({
-    id: "view-kanban",
-    label: "Show Kanban Board",
-    category: "View",
-    keybinding: getShortcutKey("kanban"),
-    action: () => appState.setActiveView("kanban"),
   });
   cmds.push({
     id: "toggle-sidebar",

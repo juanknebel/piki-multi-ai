@@ -158,19 +158,12 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
         }
         AppMode::EditWorkspace => {
             if let Some(DialogState::EditWorkspace {
-                kanban,
-                kanban_cursor,
                 prompt,
                 prompt_cursor,
-                active_field,
                 ..
             }) = &mut app.active_dialog
             {
-                use crate::dialog_state::EditWorkspaceField;
-                match active_field {
-                    EditWorkspaceField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
-                    EditWorkspaceField::Prompt => bulk_insert(prompt, prompt_cursor, text),
-                }
+                bulk_insert(prompt, prompt_cursor, text);
             }
         }
         AppMode::CreateWorktree => {
@@ -179,8 +172,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 name_cursor,
                 prompt,
                 prompt_cursor,
-                kanban,
-                kanban_cursor,
                 active_field,
                 ..
             }) = &mut app.active_dialog
@@ -189,7 +180,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 match active_field {
                     CreateWorktreeField::Name => bulk_insert(name, name_cursor, text),
                     CreateWorktreeField::Prompt => bulk_insert(prompt, prompt_cursor, text),
-                    CreateWorktreeField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
                 }
             }
         }
@@ -207,6 +197,8 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 flag_cursor,
                 agent_dir,
                 agent_dir_cursor,
+                idle_threshold,
+                idle_threshold_cursor,
                 active_field,
                 ..
             }) = &mut app.active_dialog
@@ -219,7 +211,13 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                     EditProviderField::DefaultArgs => bulk_insert(default_args, args_cursor, text),
                     EditProviderField::PromptFlag => bulk_insert(prompt_flag, flag_cursor, text),
                     EditProviderField::AgentDir => bulk_insert(agent_dir, agent_dir_cursor, text),
-                    EditProviderField::PromptFormat | EditProviderField::Dispatchable => {}
+                    EditProviderField::IdleThreshold => {
+                        let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+                        bulk_insert(idle_threshold, idle_threshold_cursor, &digits);
+                    }
+                    EditProviderField::PromptFormat
+                    | EditProviderField::Dispatchable
+                    | EditProviderField::IdleNotify => {}
                 }
             }
         }
@@ -232,14 +230,15 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 bulk_insert(buf, cursor, text);
             }
         }
-        AppMode::DispatchAgent => {
-            if let Some(DialogState::DispatchAgent {
-                ref mut additional_prompt,
-                ref mut additional_prompt_cursor,
+        AppMode::Broadcast => {
+            if let Some(DialogState::Broadcast {
+                ref mut input,
+                ref mut input_cursor,
+                step: 1,
                 ..
             }) = app.active_dialog
             {
-                bulk_insert(additional_prompt, additional_prompt_cursor, text);
+                bulk_insert(input, input_cursor, text);
             }
         }
         _ => {}

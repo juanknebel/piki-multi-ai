@@ -1,9 +1,10 @@
-/* Projects sidebar view (projects-panel.ts): project rows with a palette
-   dot, member rows carrying the project colour as a thin leading stripe.
-   Row heights reuse the density-scaled tokens. */
+/* The sidebar tree (project-tree.ts): project headers with a palette dot,
+   then one flat row per member (checkout rows reuse `.workspace-item` from
+   sidebar.css). Row heights reuse the density-scaled tokens. */
 
 #projects-view {
   height: 100%;
+  min-height: 0;
 }
 
 .projects-list {
@@ -52,7 +53,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-base);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -60,6 +61,23 @@
   flex-shrink: 0;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+
+/* The active workspace's dot, shown on a collapsed project's header row so
+   collapsing it doesn't read as "nothing here is selected" — same static
+   marker as the workspace list's active row (no animation: it doesn't ask
+   for attention, and WebKitGTK would composite a loop forever). */
+.project-active-marker {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  flex-shrink: 0;
+  box-shadow: var(--accent-glow);
+}
+
+.project-row.has-active .project-name {
+  color: var(--text-bright);
 }
 
 .project-member {
@@ -106,9 +124,112 @@
   color: var(--text-muted);
 }
 
+/* The workspace you're standing on — highlighted in every project it's a
+   member of, since the same workspace can belong to more than one. */
+.project-member.active {
+  background: var(--sidebar-item-active);
+}
+
+.project-member.active .project-member-name {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
 /* Inline inside .project-member-name so the single-line ellipsis eats the
    branch tail first and the member name stays readable. */
 .project-member-branch {
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+
+/* A synthetic bucket header (PR review / no project): same shape as a project
+   header, but it names a category rather than something the user made — so its
+   label recedes and its dot is muted (set inline). */
+.project-row.bucket .project-name {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* A repository with nothing loaded (an explicit repo member): one row,
+   adopted on click. Geometry matches `.workspace-item` (18px inset + a 14px
+   gutter) so labels align across the list whatever the row kind. */
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--row-height-lg);
+  padding: 0 14px 0 18px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.repo-row:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.repo-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.repo-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+
+/* A repository that is a project member but has no checkout loaded — say so,
+   so an empty group doesn't read as a bug. */
+.repo-empty {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-style: italic;
+}
+
+/* The row menu button only appears on hover, like the workspace rows'. */
+.repo-row .workspace-actions {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.repo-row:hover .workspace-actions,
+.repo-row:focus-visible .workspace-actions {
+  opacity: 1;
+}
+
+/* An ad-hoc PR-review checkout: transient in a way no other row is. */
+.workspace-pr {
+  flex-shrink: 0;
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+
+/* A checkout that stands in for its whole repository (every git checkout is
+   its own row): it carries the repo's identity, so it gets the repo row's
+   icon and weight. */
+.workspace-item.hoisted-repo .workspace-name {
+  font-size: var(--fs-base);
+}
+
+/* Indentation is driven by the row's own depth: under a project header is
+   one step in, a loose row sits at the top level. 14px per step = the width
+   of the `.workspace-gutter`, so each level lines up with the glyph of the
+   row heading it. */
+.projects-list [data-depth="0"] {
+  padding-left: 18px;
+}
+
+.projects-list [data-depth="1"] {
+  padding-left: 32px;
 }
