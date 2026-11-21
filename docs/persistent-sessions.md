@@ -275,6 +275,13 @@ emits the same Tauri events as today (`pty-output`, `pty-exit`,
   builder startup uses). Status bar: `session_status` polled every 3 s —
   `sessions N` / `off` / `unavailable`, with `(restart)` appended while the
   persisted Settings choice (`enabled_next`) differs from the running state.
+  `connect_session_daemon` only runs once at startup, so a daemon that dies
+  afterwards (typically its own `IDLE_EXIT` firing before any tab attaches)
+  would otherwise leave `DesktopApp.session_daemon` pointing at a dead
+  handle forever; `session_status` detects a failed `list()` and retries
+  `connect_session_daemon`, stashing the fresh handle back on `DesktopApp` on
+  success — so the bar and the next tab spawn self-heal within one poll
+  instead of reporting `unavailable` for the rest of the app session.
 
 The user-facing description of all of this is in `docs/technical.md`
 § Persistent sessions.
