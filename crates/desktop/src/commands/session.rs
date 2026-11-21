@@ -79,7 +79,7 @@ pub struct SessionStatus {
 
 #[tauri::command]
 pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<SessionStatus, String> {
-    let (enabled, enabled_next, daemon, daemon_pid) = {
+    let (enabled, enabled_next, daemon, paths) = {
         let app = state.lock();
         let next = piki_core::app_settings::resolve(
             &app.paths.config_path(),
@@ -90,7 +90,7 @@ pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<Sessi
             app.sessions_enabled,
             next,
             app.session_daemon.clone(),
-            read_daemon_pid(&app),
+            app.paths.clone(),
         )
     };
     if !enabled {
@@ -101,29 +101,55 @@ pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<Sessi
             enabled_next,
         });
     }
-    let Some(daemon) = daemon else {
+    // Socket round-trip off the main thread; the status bar polls this.
+    let listed = match daemon {
+        Some(daemon) => tauri::async_runtime::spawn_blocking(move || daemon.list())
+            .await
+            .ok(),
+        None => None,
+    };
+    if let Some(Ok(list)) = listed {
+        return Ok(SessionStatus {
+            state: "on",
+            live: list.iter().filter(|s| s.state.is_live()).count(),
+            daemon_pid: read_daemon_pid(&state.lock()),
+            enabled_next,
+        });
+    }
+    // The stored handle is gone or no longer answers — most commonly the
+    // daemon self-exited after sitting idle with zero sessions (see
+    // piki-multiplex's IDLE_EXIT). Try to relaunch it so the status bar and
+    // the next tab spawn self-heal instead of reporting "unavailable" for
+    // the rest of this app session.
+    let relaunched = tauri::async_runtime::spawn_blocking(move || {
+        crate::session::connect_session_daemon(&paths, true)
+    })
+    .await
+    .ok()
+    .flatten();
+    let Some(new_daemon) = relaunched else {
         return Ok(SessionStatus {
             state: "unavailable",
             live: 0,
-            daemon_pid,
+            daemon_pid: read_daemon_pid(&state.lock()),
             enabled_next,
         });
     };
-    // Socket round-trip off the main thread; the status bar polls this.
-    let listed = tauri::async_runtime::spawn_blocking(move || daemon.list()).await;
-    Ok(match listed {
-        Ok(Ok(list)) => SessionStatus {
-            state: "on",
-            live: list.iter().filter(|s| s.state.is_live()).count(),
-            daemon_pid,
-            enabled_next,
-        },
-        _ => SessionStatus {
-            state: "unavailable",
-            live: 0,
-            daemon_pid,
-            enabled_next,
-        },
+    let live = {
+        let d = new_daemon.clone();
+        tauri::async_runtime::spawn_blocking(move || d.list()).await
+    };
+    let live_count = match live {
+        Ok(Ok(list)) => list.iter().filter(|s| s.state.is_live()).count(),
+        _ => 0,
+    };
+    let mut app = state.lock();
+    app.session_daemon = Some(new_daemon);
+    Ok(SessionStatus {
+        state: "on",
+        live: live_count,
+        daemon_pid: read_daemon_pid(&app),
+        enabled_next,
     })
 }
 
