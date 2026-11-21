@@ -54,4 +54,11 @@ ignore = [
     "RUSTSEC-2026-0530",
     "RUSTSEC-2026-0531",
     "RUSTSEC-2026-0532",
+    # hickory-proto 0.25.2 via reqwest 0.12 hickory-dns, same stub-resolver
+    # non-reachability as above: 0549/0550/0551 are NSEC/NSEC3 nonexistence-proof
+    # and cross-class-record DNSSEC validation flaws — this build never enables
+    # DNSSEC validation. Re-check when reqwest moves to hickory >=0.26.
+    "RUSTSEC-2026-0549",
+    "RUSTSEC-2026-0550",
+    "RUSTSEC-2026-0551",
 ]
