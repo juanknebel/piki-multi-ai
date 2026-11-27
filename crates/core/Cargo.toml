@@ -12,7 +12,7 @@ piki-multiplex = { git = "https://github.com/juanknebel/piki-multiplex", tag = "
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "fs"] }
 
 # File watching
-notify = "8"
+notify = "9"
 
 # Gitignore-aware directory walk (fuzzy file index; sibling of ripgrep)
 ignore = "0.4"
